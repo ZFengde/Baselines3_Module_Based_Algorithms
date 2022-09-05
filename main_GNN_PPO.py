@@ -27,7 +27,7 @@ if __name__ == '__main__':
 	for i in range(407):
 		iters += 1
 		
-		model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"PPO")
+		model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"GNN_PPO")
 		model.save(f"{models_dir}/{TIMESTEPS*iters}")
 
 
