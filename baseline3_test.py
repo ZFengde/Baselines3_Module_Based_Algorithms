@@ -9,8 +9,8 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
 
 if __name__ == '__main__':
-	models_dir = f"models/{int(time.time())}/"
-	logdir = f"logs/{int(time.time())}/"
+	models_dir = f"Baselines3_PPO/models/{int(time.time())}/"
+	logdir = f"Baselines3_PPO/logs/{int(time.time())}/"
 
 	if not os.path.exists(models_dir):
 		os.makedirs(models_dir)
