@@ -17,8 +17,8 @@ if __name__ == '__main__':
 
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
-
-	env_id = 'Turtlebot-v1'
+	
+	env_id = 'Ant-v4'
 
 	num_cpu = 6  # Number of processes to use
 	# Create the vectorized environment
