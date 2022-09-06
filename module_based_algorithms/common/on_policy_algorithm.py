@@ -109,6 +109,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.policy.set_training_mode(False)
 
         n_steps = 0
+        ep_num_success = 0
         rollout_buffer.reset()
         # Sample new weights for the state dependent exploration
         if self.use_sde:
@@ -167,6 +168,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs, temp_1[idx], temp_2[idx])
                     rewards[idx] += self.gamma * terminal_value
+                if done and infos[idx].get('Success') == 'Yes':
+                    ep_num_success += 1
 
             rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_1, temp_2)
             self._last_obs = new_obs
