@@ -166,7 +166,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs, temp_1[idx], temp_2[idx])
-                        rewards[idx] += self.gamma * terminal_value[0]
                     rewards[idx] += self.gamma * terminal_value
 
             rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_1, temp_2)

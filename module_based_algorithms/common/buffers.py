@@ -137,7 +137,7 @@ class TempRolloutBuffer(BaseBuffer):
         self.values[self.pos] = value.clone().cpu().numpy().flatten()
         self.log_probs[self.pos] = log_prob.clone().cpu().numpy()
         self.t_1_infos[self.pos] = t_1_info.clone().cpu().numpy()
-        self.t_1_infos[self.pos] = t_2_info.clone().cpu().numpy()
+        self.t_2_infos[self.pos] = t_2_info.clone().cpu().numpy()
         self.pos += 1
         if self.pos == self.buffer_size:
             self.full = True  
@@ -186,6 +186,6 @@ class TempRolloutBuffer(BaseBuffer):
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
             self.t_1_infos[batch_inds],
-            self.t_1_infos[batch_inds],
+            self.t_2_infos[batch_inds],
         )
         return Temp_RolloutBufferSamples(*tuple(map(self.to_torch, data)))
