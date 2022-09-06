@@ -50,8 +50,8 @@ class GNN_Layer(nn.Module):
         
         self.loop_weight =nn.Parameter(th.Tensor(graph.num_nodes(), in_feat, out_feat))
         self.W = nn.Parameter(th.Tensor(graph.num_edges(), in_feat, out_feat))
-        self.m_bias = nn.Parameter(th.Tensor(graph.num_edges(), 1, out_feat))
-        self.h_bias = nn.Parameter(th.Tensor(graph.num_nodes(), 1, out_feat))
+        self.m_bias = nn.Parameter(th.Tensor(graph.num_edges(), 1, out_feat)) # useless
+        self.h_bias = nn.Parameter(th.Tensor(graph.num_nodes(), 1, out_feat)) # useless
         self._reset_parameters()
 
     def _reset_parameters(self):
