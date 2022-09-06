@@ -70,7 +70,7 @@ class GNN_Layer(nn.Module):
 
     def forward(self, feat):
         with self.g.local_scope():
-            self.g.srcdata['h'] = feat
+            self.g.srcdata['h'] = feat # 4, 6, 6, target, t, t-1, t-2
 
             # self-loop
             if self.g.srcdata['h'].dim() == 2:
@@ -79,7 +79,7 @@ class GNN_Layer(nn.Module):
             elif self.g.srcdata['h'].dim() == 3:
                 loop = th.bmm(self.g.srcdata['h'], self.loop_weight)
             self.g.update_all(self.message, fn.sum('m', 'h'))
-            h = self.g.dstdata['h'] + self.h_bias + loop
+            h = self.g.dstdata['h'] + self.h_bias + loop # 4, 6, 8, node * batch * dim
             return h.squeeze()
 
 class GNN(nn.Module):
@@ -381,14 +381,14 @@ class ActorCriticGnnPolicy(BasePolicy):
         target_infos = th.cat((target_poss,th.zeros_like(target_poss),th.zeros_like(target_poss)),dim=1).squeeze()
         nodes_infos = th.stack((target_infos, t_1_infos, t_2_infos, obss[:, 0: 6].squeeze()),dim=1) # 6, 4, 6
         nodes_infos = th.transpose(nodes_infos, 0, 1).float() # 4, 6, 6, nodes, batch, info
-        graph_output = th.tanh(self.gnn(nodes_infos)) # 4, 6, 2
-        graph_output = th.transpose(graph_output, 0, 1) # 6, 4, 2
-        features = th.flatten(graph_output, start_dim=1) # 6, 8
+        graph_output = th.tanh(self.gnn(nodes_infos)) # 4, 6, 8
+        graph_output = th.transpose(graph_output, 0, 1) # 6, 4, 8
+        features = th.flatten(graph_output, start_dim=1) # 6, 32
         return features     
 
     def gnn_process(self, obs, t_1_info, t_2_info):
         target_pos = obs[6:]
         target_info = th.cat((target_pos,th.zeros_like(target_pos),th.zeros_like(target_pos)))
         node_info = th.cat((target_info, t_1_info.squeeze(), t_2_info.squeeze(), obs[0: 6])).view(4, 6).float() # 4, 6
-        features = th.tanh(self.gnn(node_info)).flatten() # 4, 2
+        features = th.tanh(self.gnn(node_info)).flatten() # 4, 6 --> 4, 8 --> 32
         return features   
