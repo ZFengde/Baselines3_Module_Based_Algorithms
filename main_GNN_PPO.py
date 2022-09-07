@@ -18,8 +18,7 @@ if __name__ == '__main__':
 
 	env_id = 'Turtlebot-v2'
 
-	num_cpu = 6  # Number of processes to use
-	# Create the vectorized environment
+	num_cpu = 6
 	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
 	model = GNN_PPO('GnnPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
 	TIMESTEPS = 10000
