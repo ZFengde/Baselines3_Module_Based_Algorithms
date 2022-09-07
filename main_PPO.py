@@ -4,7 +4,7 @@ import time
 import turtlebot_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
-from module_based_algorithms.PPO.PPO import PPO
+from feng_algorithms.PPO.PPO import PPO
 
 if __name__ == '__main__':
 	models_dir = f"PPO/models/{int(time.time())}/"

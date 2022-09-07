@@ -4,7 +4,7 @@ import time
 import turtlebot_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
-from module_based_algorithms.GNN_PPO.GNN_PPO import GNN_PPO
+from feng_algorithms.GNN_PPO.GNN_PPO import GNN_PPO
 
 if __name__ == '__main__':
 	models_dir = f"GNN_PPO/models/{int(time.time())}/"
@@ -16,7 +16,7 @@ if __name__ == '__main__':
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 
-	env_id = 'Turtlebot-v1'
+	env_id = 'Turtlebot-v2'
 
 	num_cpu = 6  # Number of processes to use
 	# Create the vectorized environment
