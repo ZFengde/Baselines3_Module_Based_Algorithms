@@ -22,16 +22,18 @@ def learn():
 	for i in range(407):
 		iters += 1
 		model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"GNN_PPO")
-		model.save(models_dir, TIMESTEPS * iters)
+		model.save(models_dir, TIMESTEPS*iters)
 
 def test():
-	env = gym.make('Turtlebot-v2', use_gui=True)
-	model = GNN_PPO('GnnPolicy', env, verbose=1)
+	# env = gym.make('Turtlebot-v2', use_gui=True)
+	env_id = 'Turtlebot-v2'
+	env = make_vec_env(env_id, n_envs=1, seed=0, vec_env_cls=SubprocVecEnv)
+	model = GNN_PPO('GnnPolicy', env, verbose=1,  use_sde=False)
 	model.load('./GNN_PPO/models/1662633751/50000')
 	model.test(100)
 
 if __name__ == '__main__':
-	test()
+	learn()
 
 
 
