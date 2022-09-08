@@ -19,7 +19,7 @@ def learn():
 	env_id = 'Turtlebot-v2'
 	num_cpu = 6
 	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
-	model = PPO('GnnPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
+	model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
 	TIMESTEPS = 10000
 	iters = 0
 	for i in range(407):
@@ -39,6 +39,6 @@ def test():
 			observation = env.reset()
 
 if __name__ == '__main__':
-	test()
+	learn()
 
 

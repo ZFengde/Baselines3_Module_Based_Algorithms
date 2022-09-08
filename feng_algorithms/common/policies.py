@@ -280,7 +280,10 @@ class ActorCriticGnnPolicy(BasePolicy):
         """
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
-        features = self.batch_gnn_process(obs, t_1_info, t_2_info)
+        if obs.dim() == 2:
+            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
+        else:
+            features = self.gnn_process(obs, t_1_info, t_2_info)
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -346,14 +349,18 @@ class ActorCriticGnnPolicy(BasePolicy):
         values = self.value_net(latent_vf)
         return values, log_prob, distribution.entropy()
 
-    def get_distribution(self, obs: th.Tensor) -> Distribution:
+    def get_distribution(self, obs, t_1_info, t_2_info: th.Tensor) -> Distribution:
         """
         Get the current policy distribution given the observations.
 
         :param obs:
         :return: the action distribution.
         """
-        features = self.extract_features(obs)
+        # features = self.extract_features(obs)
+        if obs.dim() == 2:
+            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
+        else:
+            features = self.gnn_process(obs, t_1_info, t_2_info)
         latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(latent_pi)
 
