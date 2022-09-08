@@ -1,3 +1,4 @@
+import os
 import warnings
 from typing import Any, Dict, Optional, Type, Union
 
@@ -275,3 +276,12 @@ class GNN_PPO(OnPolicyAlgorithm):
             eval_log_path=eval_log_path,
             reset_num_timesteps=reset_num_timesteps,
         )
+
+    def save(self, models_dir):
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
+            print(f'logging to {models_dir}')
+        th.save(self.policy.state_dict(), f'{models_dir}/{self._n_updates}')
+
+    def load(self, path):
+            self.policy.load_state_dict(th.load(path))
