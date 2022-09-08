@@ -13,7 +13,7 @@ def learn():
 		os.makedirs(models_dir)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
-	env_id = 'Turtlebot-v2'
+	env_id = 'Turtlebot-v3'
 	num_cpu = 6
 	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
 	model = GNN_PPO('GnnPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
@@ -25,8 +25,7 @@ def learn():
 		model.save(models_dir, TIMESTEPS*iters)
 
 def test():
-	# env = gym.make('Turtlebot-v2', use_gui=True)
-	env_id = 'Turtlebot-v2'
+	env_id = 'Turtlebot-v3'
 	env = make_vec_env(env_id, n_envs=1, seed=0, vec_env_cls=SubprocVecEnv)
 	model = GNN_PPO('GnnPolicy', env, verbose=1,  use_sde=False)
 	model.load('./GNN_PPO/models/1662633751/50000')
