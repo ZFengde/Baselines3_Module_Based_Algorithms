@@ -10,13 +10,13 @@ from stable_baselines3.common.utils import set_random_seed
 
 
 def learn():
-	models_dir = f"Baselines3_PPO/models/{int(time.time())}/"
-	logdir = f"Baselines3_PPO/logs/{int(time.time())}/"
+	env_id = 'Turtlebot-v2'
+	models_dir = f"Baselines3_PPO/{env_id}/models/{int(time.time())}/"
+	logdir = f"Baselines3_PPO/{env_id}/logs/{int(time.time())}/"
 	if not os.path.exists(models_dir):
 		os.makedirs(models_dir)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
-	env_id = 'Turtlebot-v2'
 	num_cpu = 6
 	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
 	model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
