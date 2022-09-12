@@ -7,7 +7,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from feng_algorithms.GNN_PPO.GNN_PPO import GNN_PPO
 
 def learn():
-	env_id = 'Turtlebot-v3'
+	env_id = 'Turtlebot-v2'
 	models_dir = f"GNN_PPO/{env_id}/models/{int(time.time())}/"
 	logdir = f"GNN_PPO/{env_id}/logs/{int(time.time())}/"
 	if not os.path.exists(models_dir):
@@ -25,10 +25,10 @@ def learn():
 		model.save(models_dir, TIMESTEPS*iters)
 
 def test():
-	env_id = 'Turtlebot-v3'
+	env_id = 'Turtlebot-v2'
 	env = make_vec_env(env_id, n_envs=1, seed=0, vec_env_cls=SubprocVecEnv)
 	model = GNN_PPO('GnnPolicy', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO/{env_id}/models/1662928223/990000')
+	model.load(f'./GNN_PPO/{env_id}/models/1662931524/1320000')
 	model.test(100)
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ import torch as th
 from gym import spaces
 from torch.nn import functional as F
 
-from feng_algorithms.common.on_policy_algorithm import OnPolicyAlgorithm
+from feng_algorithms.common.rnn_on_policy_algorithm import OnPolicyAlgorithm
 from feng_algorithms.common.policies import ActorCriticGnnPolicy
 from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule

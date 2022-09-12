@@ -17,9 +17,10 @@ def learn():
 		os.makedirs(models_dir)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
-	num_cpu = 6
+	num_cpu = 1
 	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
 	model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
+	model.load(f'./Baselines3_PPO/{env_id}/models/1662931505/2050000.zip')
 	TIMESTEPS = 10000
 	iters = 0
 	for i in range(407):
@@ -28,9 +29,10 @@ def learn():
 		model.save(f"{models_dir}/{TIMESTEPS*iters}")
 
 def test():
-	env = gym.make('Turtlebot-v2', use_gui=True)
+	env_id = 'Turtlebot-v2'
+	env = make_vec_env(env_id, n_envs=1, seed=0, vec_env_cls=SubprocVecEnv)
 	model = PPO('MlpPolicy', env, verbose=1, use_sde=False)
-	model.load('./Baselines3_PPO/models/1662560319/4050000.zip')
+	model.load(f'./Baselines3_PPO/{env_id}/models/1662931505/2050000.zip')
 	obs = env.reset()
 	while True:
 		action, _states = model.predict(obs, deterministic=True)  # User-defined policy function
