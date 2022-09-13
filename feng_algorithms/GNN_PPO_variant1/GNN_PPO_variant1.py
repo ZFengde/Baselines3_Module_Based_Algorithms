@@ -8,25 +8,25 @@ import torch as th
 from gym import spaces
 from torch.nn import functional as F
 
-from feng_algorithms.common.rnn_on_policy_algorithm import OnPolicyAlgorithm
-from feng_algorithms.common.policies import ActorCriticGnnPolicy
+from feng_algorithms.common.gnn_on_policy_algorithm_variant1 import OnPolicyAlgorithm
+from feng_algorithms.common.policies import ActorCriticGnnPolicy_variant1
 from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
 
 
-class GNN_PPO_rectified(OnPolicyAlgorithm):
+class GNN_PPO_varient1(OnPolicyAlgorithm):
 
     policy_aliases: Dict[str, Type[BasePolicy]] = {
         "MlpPolicy": ActorCriticPolicy,
-        "GnnPolicy": ActorCriticGnnPolicy,
+        "GnnPolicy_variant1": ActorCriticGnnPolicy_variant1,
         "CnnPolicy": ActorCriticCnnPolicy,
         "MultiInputPolicy": MultiInputActorCriticPolicy,
     }
 
     def __init__(
         self,
-        policy: Union[str, Type[ActorCriticGnnPolicy]],
+        policy: Union[str, Type[ActorCriticGnnPolicy_variant1]],
         env: Union[GymEnv, str],
         learning_rate: Union[float, Schedule] = 3e-4,
         n_steps: int = 2048,
@@ -261,10 +261,10 @@ class GNN_PPO_rectified(OnPolicyAlgorithm):
         eval_env: Optional[GymEnv] = None,
         eval_freq: int = -1,
         n_eval_episodes: int = 5,
-        tb_log_name: str = "GNN_PPO_rectified",
+        tb_log_name: str = "GNN_PPO_varient1",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-    ) -> "GNN_PPO_rectified":
+    ) -> "GNN_PPO_varient1":
 
         return super().learn(
             total_timesteps=total_timesteps,
