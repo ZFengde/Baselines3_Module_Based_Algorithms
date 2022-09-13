@@ -24,6 +24,7 @@ class TempRolloutBuffer(BaseBuffer):
         gae_lambda: float = 1,
         gamma: float = 0.99,
         n_envs: int = 1,
+        t_info_dim: int = 0,
     ):
         super(TempRolloutBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
         self.buffer_size = buffer_size
@@ -33,6 +34,7 @@ class TempRolloutBuffer(BaseBuffer):
         self.gae_lambda = gae_lambda
         self.gamma = gamma
         self.n_envs = n_envs
+        self.t_info_dim = t_info_dim
 
         # self.pos refer the current step position in buffer
         self.pos = 0
@@ -57,8 +59,8 @@ class TempRolloutBuffer(BaseBuffer):
         self.values = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
-        self.t_1_infos = np.zeros((self.buffer_size, self.n_envs) + (6,), dtype=np.float32)
-        self.t_2_infos = np.zeros((self.buffer_size, self.n_envs) + (6,), dtype=np.float32)
+        self.t_1_infos = np.zeros((self.buffer_size, self.n_envs) + (self.t_info_dim,), dtype=np.float32)
+        self.t_2_infos = np.zeros((self.buffer_size, self.n_envs) + (self.t_info_dim,), dtype=np.float32)
 
         self.generator_ready = False
 

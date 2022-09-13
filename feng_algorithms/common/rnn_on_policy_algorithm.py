@@ -12,13 +12,13 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
 from stable_baselines3.common.vec_env import VecEnv
 from feng_algorithms.common.buffers import TempRolloutBuffer
-from feng_algorithms.common.policies import ActorCriticGnnPolicy
+from feng_algorithms.common.policies import ActorCriticRnnPolicy
 
 class OnPolicyAlgorithm(BaseAlgorithm):
 
     def __init__(
         self,
-        policy: Union[str, Type[ActorCriticGnnPolicy]],
+        policy: Union[str, Type[ActorCriticRnnPolicy]],
         env: Union[GymEnv, str],
         learning_rate: Union[float, Schedule],
         n_steps: int,
@@ -81,6 +81,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             gamma=self.gamma,
             gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
+            t_info_dim = self.observation_space.shape[0]
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
@@ -90,8 +91,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             **self.policy_kwargs  # pytype:disable=not-instantiable
         )
         self.policy = self.policy.to(self.device)
-        self.policy.g.to(self.device)
-        self.policy.gnn.to(self.device)
 
     def collect_rollouts(
         self,
@@ -123,7 +122,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 temp_1 = obs_as_tensor(self.t_1_info, self.device)
                 temp_2 = obs_as_tensor(self.t_2_info, self.device)
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor, temp_1, temp_2)
+                obs_sequence = th.stack((temp_2, temp_1, obs_tensor), dim=1).float()
+                actions, values, log_probs = self.policy(obs_sequence)
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -149,7 +149,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 actions = actions.reshape(-1, 1)
 
             self.t_2_info = self.t_1_info
-            self.t_1_info = new_obs[:, 0: self.robot_info_dim]
+            self.t_1_info = new_obs
 
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
@@ -159,11 +159,12 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
-                    self.t_1_info[idx] = np.zeros((1, self.robot_info_dim))
-                    self.t_2_info[idx] = np.zeros((1, self.robot_info_dim))
+                    self.t_1_info[idx] = np.zeros((1, self.env.observation_space.shape[0]))
+                    self.t_2_info[idx] = np.zeros((1, self.env.observation_space.shape[0]))
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
-                        terminal_value = self.policy.predict_values(terminal_obs, temp_1[idx], temp_2[idx])
+                        obs_sequence = th.stack((temp_2[idx], temp_1[idx], terminal_obs)).float()
+                        terminal_value = self.policy.predict_values(obs_sequence)
                     rewards[idx] += self.gamma * terminal_value
                 if done and infos[idx].get('Success') == 'Yes':
                     ep_num_success += 1
@@ -174,7 +175,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), temp_1, temp_2)
+            obs_sequence = th.stack((temp_2, temp_1, obs_as_tensor(new_obs, self.device)), dim=1).float()
+            values = self.policy.predict_values(obs_sequence)
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 

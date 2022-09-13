@@ -4,19 +4,19 @@ import time
 import turtlebot_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
-from feng_algorithms.GNN_PPO.GNN_PPO import GNN_PPO
+from feng_algorithms.RNN_PPO.RNN_PPO import RNN_PPO
 
 def learn():
 	env_id = 'Turtlebot-v2'
-	models_dir = f"GNN_PPO/{env_id}/models/{int(time.time())}/"
-	logdir = f"GNN_PPO/{env_id}/logs/{int(time.time())}/"
+	models_dir = f"RNN_PPO/{env_id}/models/{int(time.time())}/"
+	logdir = f"RNN_PPO/{env_id}/logs/{int(time.time())}/"
 	if not os.path.exists(models_dir):
 		os.makedirs(models_dir)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 	num_cpu = 6
 	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv)
-	model = GNN_PPO('GnnPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
+	model = RNN_PPO('RnnPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
 	TIMESTEPS = 10000
 	iters = 0
 	for i in range(407):
@@ -27,8 +27,8 @@ def learn():
 def test():
 	env_id = 'Turtlebot-v2'
 	env = make_vec_env(env_id, n_envs=1, seed=0, vec_env_cls=SubprocVecEnv)
-	model = GNN_PPO('GnnPolicy', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO/{env_id}/models/1662931524/1320000')
+	model = RNN_PPO('RnnPolicy', env, verbose=1,  use_sde=False)
+	model.load(f'./RNN_PPO/{env_id}/models/1662931524/1320000')
 	model.test(100)
 
 if __name__ == '__main__':

@@ -161,12 +161,8 @@ class RNN_PPO(OnPolicyAlgorithm):
                 # Re-sample the noise matrix because the log_std has changed
                 if self.use_sde:
                     self.policy.reset_noise(self.batch_size)
-
-                values, log_prob, entropy = self.policy.evaluate_actions(
-                                                                        rollout_data.observations, 
-                                                                        rollout_data.t_1_infos,
-                                                                        rollout_data.t_2_infos,
-                                                                        actions)
+                obs_sequence = th.stack((rollout_data.t_2_infos, rollout_data.t_1_infos, rollout_data.observations), dim=1)
+                values, log_prob, entropy = self.policy.evaluate_actions(obs_sequence, actions)
                 values = values.flatten()
                 # Normalize advantage
                 advantages = rollout_data.advantages

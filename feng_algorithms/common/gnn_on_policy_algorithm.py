@@ -83,6 +83,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             gamma=self.gamma,
             gae_lambda=self.gae_lambda,
             n_envs=self.n_envs,
+            t_info_dim = 6,
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,

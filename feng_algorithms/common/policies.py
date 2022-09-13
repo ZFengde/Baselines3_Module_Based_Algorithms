@@ -470,13 +470,8 @@ class ActorCriticRnnPolicy(BasePolicy):
 
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
-
-        src_ids = th.tensor([0, 0, 0, 1, 2, 1])
-        dst_ids = th.tensor([1, 2, 3, 2, 3, 3])
-        device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
-        self.g = dgl.graph((src_ids, dst_ids)).to(device)
         
-        self.gnn = GNN(6, 8, self.g)
+        self.rnn = nn.RNN(self.observation_space.shape[0], 32, 1, batch_first=True) # input_dim=8, output_hidden_dim=32, layer_num=2
 
         self._build(lr_schedule)
 
@@ -562,6 +557,7 @@ class ActorCriticRnnPolicy(BasePolicy):
             # originally from openai/baselines (default gains/init_scales).
             module_gains = {
                 self.mlp_extractor: np.sqrt(2),
+                self.rnn: np.sqrt(2),
                 self.action_net: 0.01,
                 self.value_net: 1,
             }
@@ -571,7 +567,7 @@ class ActorCriticRnnPolicy(BasePolicy):
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
-    def forward(self, obs: th.Tensor, t_1_info: th.Tensor, t_2_info: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def forward(self, obs_sequence: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -581,11 +577,8 @@ class ActorCriticRnnPolicy(BasePolicy):
         """
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
-        else:
-            features = self.gnn_process(obs, t_1_info, t_2_info)
-        latent_pi, latent_vf = self.mlp_extractor(features)
+        _, features = self.rnn(obs_sequence) # 6*3*8 --> 6*3*32,  1*6*32
+        latent_pi, latent_vf = self.mlp_extractor(features.squeeze())
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
         distribution = self._get_action_dist_from_latent(latent_pi)
@@ -628,7 +621,7 @@ class ActorCriticRnnPolicy(BasePolicy):
         """
         return self.get_distribution(observation).get_actions(deterministic=deterministic)
 
-    def evaluate_actions(self, obs: th.Tensor, t_1_info: th.Tensor, t_2_info: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def evaluate_actions(self, obs_sequence: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Evaluate actions according to the current policy,
         given the observations.
@@ -639,18 +632,15 @@ class ActorCriticRnnPolicy(BasePolicy):
             and entropy of the action distribution.
         """
         # Preprocess the observation if needed
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
-        else:
-            features = self.gnn_process(obs, t_1_info, t_2_info)
+        _, features = self.rnn(obs_sequence)
         # features = self.extract_features(obs)
-        latent_pi, latent_vf = self.mlp_extractor(features)
+        latent_pi, latent_vf = self.mlp_extractor(features.squeeze())
         distribution = self._get_action_dist_from_latent(latent_pi)
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
         return values, log_prob, distribution.entropy()
 
-    def get_distribution(self, obs, t_1_info, t_2_info: th.Tensor) -> Distribution:
+    def get_distribution(self, obs_sequence: th.Tensor) -> Distribution:
         """
         Get the current policy distribution given the observations.
 
@@ -658,14 +648,11 @@ class ActorCriticRnnPolicy(BasePolicy):
         :return: the action distribution.
         """
         # features = self.extract_features(obs)
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
-        else:
-            features = self.gnn_process(obs, t_1_info, t_2_info)
+        features = self.rnn(obs_sequence)
         latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(latent_pi)
 
-    def predict_values(self, obs: th.Tensor, t_1_info: th.Tensor, t_2_info: th.Tensor) -> th.Tensor:
+    def predict_values(self, obs_sequence: th.Tensor) -> th.Tensor:
         """
         Get the estimated values according to the current policy given the observations.
 
@@ -673,26 +660,6 @@ class ActorCriticRnnPolicy(BasePolicy):
         :return: the estimated values.
         """
         # features = self.extract_features(obs)
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
-        else:
-            features = self.gnn_process(obs, t_1_info, t_2_info)
-        latent_vf = self.mlp_extractor.forward_critic(features)
+        _, features = self.rnn(obs_sequence) 
+        latent_vf = self.mlp_extractor.forward_critic(features.squeeze())
         return self.value_net(latent_vf)
-
-    def batch_gnn_process(self, obss, t_1_infos, t_2_infos):
-        target_poss = obss[:,6:]
-        target_infos = th.cat((target_poss,th.zeros_like(target_poss),th.zeros_like(target_poss)),dim=1).squeeze()
-        nodes_infos = th.stack((target_infos, t_1_infos, t_2_infos, obss[:, 0: 6].squeeze()),dim=1) # 6, 4, 6
-        nodes_infos = th.transpose(nodes_infos, 0, 1).float() # 4, 6, 6, nodes, batch, info
-        graph_output = th.tanh(self.gnn(nodes_infos)) # 4, 6, 8
-        graph_output = th.transpose(graph_output, 0, 1) # 6, 4, 8
-        features = th.flatten(graph_output, start_dim=1) # 6, 32
-        return features     
-
-    def gnn_process(self, obs, t_1_info, t_2_info):
-        target_pos = obs[6:]
-        target_info = th.cat((target_pos,th.zeros_like(target_pos),th.zeros_like(target_pos)))
-        node_info = th.cat((target_info, t_1_info.squeeze(), t_2_info.squeeze(), obs[0: 6])).view(4, 6).float() # 4, 6
-        features = th.tanh(self.gnn(node_info)).flatten() # 4, 6 --> 4, 8 --> 32
-        return features   
