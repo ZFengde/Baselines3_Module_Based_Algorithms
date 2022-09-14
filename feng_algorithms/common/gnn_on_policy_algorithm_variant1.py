@@ -76,14 +76,14 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer
 
         self.rollout_buffer = buffer_cls(
-            self.n_steps,
-            self.observation_space,
-            self.action_space,
+            buffer_size=self.n_steps,
+            observation_space=self.observation_space,
+            action_space=self.action_space,
             device=self.device,
-            gamma=self.gamma,
             gae_lambda=self.gae_lambda,
+            gamma=self.gamma,
             n_envs=self.n_envs,
-            t_info_dim = 6,
+            robot_dim = 6,
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
@@ -123,10 +123,12 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
-                temp_1 = obs_as_tensor(self.t_1_info, self.device)
-                temp_2 = obs_as_tensor(self.t_2_info, self.device)
+                temp_1_target = obs_as_tensor(self.t_1_info, self.device)
+                temp_2_target = obs_as_tensor(self.t_1_info, self.device)
+                temp_1_robot = obs_as_tensor(self.t_1_info, self.device)
+                temp_2_robot = obs_as_tensor(self.t_2_info, self.device)
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor, temp_1, temp_2)
+                actions, values, log_probs = self.policy(obs_tensor, temp_1_robot, temp_2_robot)
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -166,18 +168,18 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     self.t_2_info[idx] = np.zeros((1, self.robot_info_dim))
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
-                        terminal_value = self.policy.predict_values(terminal_obs, temp_1[idx], temp_2[idx])
+                        terminal_value = self.policy.predict_values(terminal_obs, temp_1_robot[idx], temp_2_robot[idx])
                     rewards[idx] += self.gamma * terminal_value
                 if done and infos[idx].get('Success') == 'Yes':
                     ep_num_success += 1
 
-            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_1, temp_2)
+            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_1_robot, temp_2_robot)
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), temp_1, temp_2)
+            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), temp_1_robot, temp_2_robot)
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 

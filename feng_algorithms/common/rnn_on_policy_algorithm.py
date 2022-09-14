@@ -74,14 +74,14 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer
 
         self.rollout_buffer = buffer_cls(
-            self.n_steps,
-            self.observation_space,
-            self.action_space,
+            buffer_size=self.n_steps,
+            observation_space=self.observation_space,
+            action_space=self.action_space,
             device=self.device,
-            gamma=self.gamma,
             gae_lambda=self.gae_lambda,
+            gamma=self.gamma,
             n_envs=self.n_envs,
-            t_info_dim = self.observation_space.shape[0]
+            robot_dim = self.observation_space.shape[0],
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
@@ -119,8 +119,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
-                temp_1 = obs_as_tensor(self.t_1_info, self.device)
-                temp_2 = obs_as_tensor(self.t_2_info, self.device)
+                temp_1 = obs_as_tensor(self.t_1_robot, self.device)
+                temp_2 = obs_as_tensor(self.t_2_robot, self.device)
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
                 obs_sequence = th.stack((temp_2, temp_1, obs_tensor), dim=1).float()
                 actions, values, log_probs = self.policy(obs_sequence)
@@ -148,8 +148,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            self.t_2_info = self.t_1_info
-            self.t_1_info = new_obs
+            self.t_2_robot = self.t_1_robot
+            self.t_1_robot = new_obs
 
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
@@ -159,8 +159,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
-                    self.t_1_info[idx] = np.zeros((1, self.env.observation_space.shape[0]))
-                    self.t_2_info[idx] = np.zeros((1, self.env.observation_space.shape[0]))
+                    self.t_1_robot[idx] = np.zeros((1, self.env.observation_space.shape[0]))
+                    self.t_2_robot[idx] = np.zeros((1, self.env.observation_space.shape[0]))
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
                         obs_sequence = th.stack((temp_2[idx], temp_1[idx], terminal_obs)).float()

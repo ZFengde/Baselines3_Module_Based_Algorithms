@@ -111,8 +111,8 @@ class RNN_PPO(OnPolicyAlgorithm):
         self.normalize_advantage = normalize_advantage
         self.target_kl = target_kl
 
-        self.t_1_info = np.zeros((self.n_envs, self.env.observation_space.shape[0]))
-        self.t_2_info = np.zeros((self.n_envs, self.env.observation_space.shape[0]))
+        self.t_1_robot = np.zeros((self.n_envs, self.env.observation_space.shape[0]))
+        self.t_2_robot = np.zeros((self.n_envs, self.env.observation_space.shape[0]))
 
         if _init_setup_model:
             self._setup_model()
@@ -161,7 +161,7 @@ class RNN_PPO(OnPolicyAlgorithm):
                 # Re-sample the noise matrix because the log_std has changed
                 if self.use_sde:
                     self.policy.reset_noise(self.batch_size)
-                obs_sequence = th.stack((rollout_data.t_2_infos, rollout_data.t_1_infos, rollout_data.observations), dim=1)
+                obs_sequence = th.stack((rollout_data.t_2_robot, rollout_data.t_1_robot, rollout_data.observations), dim=1)
                 values, log_prob, entropy = self.policy.evaluate_actions(obs_sequence, actions)
                 values = values.flatten()
                 # Normalize advantage

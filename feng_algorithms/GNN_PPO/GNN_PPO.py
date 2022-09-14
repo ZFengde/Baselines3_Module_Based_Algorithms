@@ -114,8 +114,8 @@ class GNN_PPO(OnPolicyAlgorithm):
         self.target_kl = target_kl
         self.robot_info_dim = robot_info_dim
 
-        self.t_1_info = np.zeros((self.n_envs, self.robot_info_dim))
-        self.t_2_info = np.zeros((self.n_envs, self.robot_info_dim))
+        self.t_1_robot= np.zeros((self.n_envs, self.robot_info_dim))
+        self.t_2_robot = np.zeros((self.n_envs, self.robot_info_dim))
 
         if _init_setup_model:
             self._setup_model()
@@ -167,8 +167,8 @@ class GNN_PPO(OnPolicyAlgorithm):
 
                 values, log_prob, entropy = self.policy.evaluate_actions(
                                                                         rollout_data.observations, 
-                                                                        rollout_data.t_1_infos,
-                                                                        rollout_data.t_2_infos,
+                                                                        rollout_data.t_1_robot,
+                                                                        rollout_data.t_2_robot,
                                                                         actions)
                 values = values.flatten()
                 # Normalize advantage
@@ -291,15 +291,15 @@ class GNN_PPO(OnPolicyAlgorithm):
         self.rollout_buffer.reset()
         obs = self.env.reset()
         for episode_num in range(test_episode):
-            t_1_info_test = np.zeros(6)
-            t_2_info_test = np.zeros(6)
+            t_1_robot_test = np.zeros(6)
+            t_2_robot_test = np.zeros(6)
             ep_reward = 0
             ep_len = 0
             
             while True:
                 with th.no_grad():
-                    temp_1 = obs_as_tensor(t_1_info_test, self.device)
-                    temp_2 = obs_as_tensor(t_2_info_test, self.device)
+                    temp_1 = obs_as_tensor(t_1_robot_test, self.device)
+                    temp_2 = obs_as_tensor(t_2_robot_test, self.device)
                     obs_tensor = obs_as_tensor(obs, self.device).squeeze()
                     action, _, _ = self.policy(obs_tensor, temp_1, temp_2, deterministic=True)
                 action = action.unsqueeze(dim=0).cpu().numpy()
@@ -307,8 +307,8 @@ class GNN_PPO(OnPolicyAlgorithm):
                 clipped_action = np.clip(action, self.env.action_space.low, self.env.action_space.high)
                 obs, reward, done, _ = self.env.step(clipped_action)
 
-                t_2_info_test = t_1_info_test
-                t_1_info_test = obs[0][0: 6]
+                t_2_robot_test = t_1_robot_test
+                t_1_robot_test = obs[0][0: 6]
 
                 ep_reward += reward
                 ep_len += 1
