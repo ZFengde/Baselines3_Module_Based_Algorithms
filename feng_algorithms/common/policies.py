@@ -713,7 +713,10 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         self.net_arch = net_arch
         self.activation_fn = activation_fn
         self.ortho_init = ortho_init
+        self.graph_out_dim = 6
         
+        # TODO, need to check if it's necessary
+        observation_space = self.observation_space
         self.features_extractor = features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
         # self.features_dim = self.features_extractor.features_dim
         self.features_dim = 32
@@ -739,12 +742,14 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
-        src_ids = th.tensor([0, 0, 0, 1, 1, 2, 3, 3, 4])
+        src_ids = th.tensor([0, 0, 0, 1, 1, 2, 3, 3, 4]) # 6 nodes, then 6, 6, , i.e., nodes, batch, 
         dst_ids = th.tensor([1, 2, 3, 2, 4, 5, 4, 5, 5])
         device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
         self.g = dgl.graph((src_ids, dst_ids)).to(device)
         
-        self.gnn = GNN(6, 6, self.g) # input = 6 * 6, output = 6 * 6, 36
+        self.gnn = GNN(self.observation_space.shape[0], self.graph_out_dim, self.g) # input = 6 * 6, output = 6 * 6, 36
+
+        self.features_dim = self.g.num_nodes() * self.graph_out_dim # this is the gnn output dimension
 
         self._build(lr_schedule)
 
@@ -839,7 +844,7 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
-    def forward(self, obs: th.Tensor, t_1_info: th.Tensor, t_2_info: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def forward(self, obs: th.Tensor, temp_info: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -850,9 +855,9 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
         if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
+            features = self.batch_gnn_process(obs, temp_info)
         else:
-            features = self.gnn_process(obs, t_1_info, t_2_info)
+            features = self.gnn_process(obs, temp_info)
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -933,7 +938,7 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(latent_pi)
 
-    def predict_values(self, obs: th.Tensor, t_1_info: th.Tensor, t_2_info: th.Tensor) -> th.Tensor:
+    def predict_values(self, obs: th.Tensor, temp_info: th.Tensor) -> th.Tensor:
         """
         Get the estimated values according to the current policy given the observations.
 
@@ -942,25 +947,29 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         """
         # features = self.extract_features(obs)
         if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, t_1_info, t_2_info)
+            features = self.batch_gnn_process(obs, temp_info)
         else:
-            features = self.gnn_process(obs, t_1_info, t_2_info)
+            features = self.gnn_process(obs, temp_info)
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
-    def batch_gnn_process(self, obss, t_1_infos, t_2_infos):
-        target_poss = obss[:,6:]
-        target_infos = th.cat((target_poss,th.zeros_like(target_poss),th.zeros_like(target_poss)),dim=1).squeeze()
-        nodes_infos = th.stack((target_infos, t_1_infos, t_2_infos, obss[:, 0: 6].squeeze()),dim=1) # 6, 4, 6
-        nodes_infos = th.transpose(nodes_infos, 0, 1).float() # 4, 6, 6, nodes, batch, info
-        graph_output = th.tanh(self.gnn(nodes_infos)) # 4, 6, 8
-        graph_output = th.transpose(graph_output, 0, 1) # 6, 4, 8
+    def batch_gnn_process(self, obss, temp_info): # batch * dim, nodes * batch * dim | 6*113, 4*6*113
+        target_poss = obss[:, :2]
+        # TODO, should unpack package here
+
+        target_infos = nn.functional.pad(target_poss, (0, self.observation_space.shape[0]-2)).unsqueeze(0) # TODO, need to check dim here
+        nodes_infos = th.cat((temp_info[:2], target_infos, temp_info[2:], obss.unsqueeze(0)), dim=0).float() # nodes*batch*dim = 6*6*dim
+
+        graph_output = th.tanh(self.gnn(nodes_infos)) # nodes, batch, out_dim
+        graph_output = th.transpose(graph_output, 0, 1) # batch, nodes, out_dim
         features = th.flatten(graph_output, start_dim=1) # 6, 32
         return features     
 
-    def gnn_process(self, obs, t_1_info, t_2_info):
-        target_pos = obs[6:]
-        target_info = th.cat((target_pos,th.zeros_like(target_pos),th.zeros_like(target_pos)))
-        node_info = th.cat((target_info, t_1_info.squeeze(), t_2_info.squeeze(), obs[0: 6])).view(4, 6).float() # 4, 6
+    def gnn_process(self, obs, temp_info):
+        target_pos = obs[:2]
+
+        target_info = nn.functional.pad(target_pos, (0, self.observation_space.shape[0]-2)) # TODO, need to check dim here
+        node_info = th.cat((temp_info[:2], target_info, temp_info[2:], obs)).float() # 4, 6
+
         features = th.tanh(self.gnn(node_info)).flatten() # 4, 6 --> 4, 8 --> 32
         return features   

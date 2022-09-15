@@ -7,7 +7,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from feng_algorithms.RNN_PPO.RNN_PPO import RNN_PPO
 
 def learn():
-	env_id = 'Ant-v3'
+	env_id = 'Humanoid-v3'
 	models_dir = f"RNN_PPO/{env_id}/models/{int(time.time())}/"
 	logdir = f"RNN_PPO/{env_id}/logs/{int(time.time())}/"
 	if not os.path.exists(models_dir):

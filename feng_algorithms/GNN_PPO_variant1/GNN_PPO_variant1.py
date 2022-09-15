@@ -15,7 +15,7 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import explained_variance, get_schedule_fn
 
 
-class GNN_PPO_varient1(OnPolicyAlgorithm):
+class GNN_PPO_variant1(OnPolicyAlgorithm):
 
     policy_aliases: Dict[str, Type[BasePolicy]] = {
         "MlpPolicy": ActorCriticPolicy,
@@ -40,7 +40,6 @@ class GNN_PPO_varient1(OnPolicyAlgorithm):
         ent_coef: float = 0.0,
         vf_coef: float = 0.5,
         max_grad_norm: float = 0.5,
-        robot_info_dim: int = 6,
         use_sde: bool = False,
         sde_sample_freq: int = -1,
         target_kl: Optional[float] = None,
@@ -63,7 +62,6 @@ class GNN_PPO_varient1(OnPolicyAlgorithm):
             ent_coef=ent_coef,
             vf_coef=vf_coef,
             max_grad_norm=max_grad_norm,
-            robot_info_dim=robot_info_dim,
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
             tensorboard_log=tensorboard_log,
@@ -112,12 +110,11 @@ class GNN_PPO_varient1(OnPolicyAlgorithm):
         self.clip_range_vf = clip_range_vf
         self.normalize_advantage = normalize_advantage
         self.target_kl = target_kl
-        self.robot_info_dim = robot_info_dim
 
-        self.t_1_target = np.zeros((self.n_envs, self.robot_info_dim))
-        self.t_2_target = np.zeros((self.n_envs, self.robot_info_dim))
-        self.t_1_robot = np.zeros((self.n_envs, self.robot_info_dim))
-        self.t_2_robot = np.zeros((self.n_envs, self.robot_info_dim))
+        self.t_1_target = np.zeros((self.n_envs, self.observation_space.shape[0]))
+        self.t_2_target = np.zeros((self.n_envs, self.observation_space.shape[0]))
+        self.t_1_robot = np.zeros((self.n_envs, self.observation_space.shape[0]))
+        self.t_2_robot = np.zeros((self.n_envs, self.observation_space.shape[0]))
 
         if _init_setup_model:
             self._setup_model()
@@ -263,10 +260,10 @@ class GNN_PPO_varient1(OnPolicyAlgorithm):
         eval_env: Optional[GymEnv] = None,
         eval_freq: int = -1,
         n_eval_episodes: int = 5,
-        tb_log_name: str = "GNN_PPO_varient1",
+        tb_log_name: str = "GNN_PPO_variant1",
         eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-    ) -> "GNN_PPO_varient1":
+    ) -> "GNN_PPO_variant1":
 
         return super().learn(
             total_timesteps=total_timesteps,

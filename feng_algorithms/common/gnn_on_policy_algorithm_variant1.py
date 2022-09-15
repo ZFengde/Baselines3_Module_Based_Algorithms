@@ -11,7 +11,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
 from stable_baselines3.common.vec_env import VecEnv
-from feng_algorithms.common.buffers import TempRolloutBuffer
+from feng_algorithms.common.buffers import TempRolloutBuffer_variant1
 from feng_algorithms.common.policies import ActorCriticGnnPolicy
 
 class OnPolicyAlgorithm(BaseAlgorithm):
@@ -27,7 +27,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         ent_coef: float,
         vf_coef: float,
         max_grad_norm: float,
-        robot_info_dim: int,
         use_sde: bool,
         sde_sample_freq: int,
         tensorboard_log: Optional[str] = None,
@@ -63,7 +62,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
         self.max_grad_norm = max_grad_norm
-        self.robot_info_dim = robot_info_dim
         self.rollout_buffer = None
 
         if _init_setup_model:
@@ -73,7 +71,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer
+        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer_variant1
 
         self.rollout_buffer = buffer_cls(
             buffer_size=self.n_steps,
@@ -100,7 +98,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self,
         env: VecEnv,
         callback: BaseCallback,
-        rollout_buffer: TempRolloutBuffer,
+        rollout_buffer: TempRolloutBuffer_variant1,
         n_rollout_steps: int,
     ) -> bool:
 
@@ -123,12 +121,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
-                temp_1_target = obs_as_tensor(self.t_1_info, self.device)
-                temp_2_target = obs_as_tensor(self.t_1_info, self.device)
-                temp_1_robot = obs_as_tensor(self.t_1_info, self.device)
-                temp_2_robot = obs_as_tensor(self.t_2_info, self.device)
+                temp_info = self.to_tensor_pack(self.t_1_target, self.t_2_target, self.t_1_robot, self.t_2_robot) # 4, 6, 2/dim 
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor, temp_1_robot, temp_2_robot)
+                # TODO, important part
+                actions, values, log_probs = self.policy(obs_tensor, temp_info) 
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -153,8 +149,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            self.t_2_info = self.t_1_info
-            self.t_1_info = new_obs[:, 0: self.robot_info_dim]
+            # TODO, self.temp_buffer_update
+            self.temp_buffer_update(new_obs)
 
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
@@ -164,22 +160,22 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
-                    self.t_1_info[idx] = np.zeros((1, self.robot_info_dim))
-                    self.t_2_info[idx] = np.zeros((1, self.robot_info_dim))
+                    # TODO, self.temp_buffer_reset(idx)
+                    self.temp_buffer_reset(idx)
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
-                        terminal_value = self.policy.predict_values(terminal_obs, temp_1_robot[idx], temp_2_robot[idx])
+                        terminal_value = self.policy.predict_values(terminal_obs, temp_info[:, idx])
                     rewards[idx] += self.gamma * terminal_value
                 if done and infos[idx].get('Success') == 'Yes':
                     ep_num_success += 1
 
-            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_1_robot, temp_2_robot)
+            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_info)
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), temp_1_robot, temp_2_robot)
+            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), temp_info)
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 
@@ -246,3 +242,28 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         state_dicts = ["policy", "policy.optimizer"]
 
         return state_dicts, []
+
+    def to_tensor_pack(self, *args):
+        output = []
+        for ele in args:
+            ele = obs_as_tensor(ele, device=self.device)
+            output.append(ele)
+        output = th.stack(output)
+        return output
+
+    def temp_buffer_update(self, new_obs): # this target setting is only for general mujoco envs
+        self.t_2_target = self.t_1_target
+
+        self.t_1_target = new_obs[:, :2] # since target is always x, y
+        self.t_1_target = np.pad(self.t_1_target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
+
+        self.t_2_robot = self.t_1_robot
+        self.t_1_robot = new_obs
+
+    def temp_buffer_reset(self, index):
+        # which is wrong, but should be able to work, amend later
+        # which won't cause huge difference
+        self.t_1_target[index] = np.zeros_like(self.t_1_target[index])
+        self.t_2_target[index] = np.zeros_like(self.t_2_target[index])
+        self.t_1_robot[index] = np.zeros_like(self.t_1_robot[index])
+        self.t_2_robot[index] = np.zeros_like(self.t_2_robot[index])

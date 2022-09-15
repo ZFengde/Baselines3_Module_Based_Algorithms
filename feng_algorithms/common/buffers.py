@@ -21,11 +21,7 @@ class Temp_RolloutBufferSamples_variant1(NamedTuple):
     old_log_prob: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
-    t_1_target: torch.Tensor
-    t_2_target: torch.Tensor
-    t_1_robot: torch.Tensor
-    t_2_robot: torch.Tensor
-
+    temp_info: list
 
 class TempRolloutBuffer(BaseBuffer):
     def __init__(
@@ -217,7 +213,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         n_envs: int = 1,
         robot_dim: int = 0,
     ):
-        super(TempRolloutBuffer, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
+        super(TempRolloutBuffer_variant1, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
         self.buffer_size = buffer_size
         self.observation_space = observation_space
         self.action_space = action_space
@@ -250,10 +246,8 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.values = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
-        self.t_1_target = np.zeros((self.buffer_size, self.n_envs) + (self.robot_dim,), dtype=np.float32)
-        self.t_2_target = np.zeros((self.buffer_size, self.n_envs) + (self.robot_dim,), dtype=np.float32)
-        self.t_1_robot = np.zeros((self.buffer_size, self.n_envs) + (self.robot_dim,), dtype=np.float32)
-        self.t_2_robot = np.zeros((self.buffer_size, self.n_envs) + (self.robot_dim,), dtype=np.float32)
+        # TODO, reset didn't test here
+        self.temp_info = []
 
         self.generator_ready = False
 
@@ -303,10 +297,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         episode_start: np.ndarray,
         value: torch.Tensor,
         log_prob: torch.Tensor,
-        t_1_target: torch.Tensor,
-        t_2_target: torch.Tensor,
-        t_1_robot: torch.Tensor,
-        t_2_robot: torch.Tensor,
+        temp_info: list,
     ):
         """
         :param obs: Observation
@@ -333,10 +324,8 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.episode_starts[self.pos] = np.array(episode_start).copy()
         self.values[self.pos] = value.clone().cpu().numpy().flatten()
         self.log_probs[self.pos] = log_prob.clone().cpu().numpy()
-        self.t_1_target[self.pos] = t_1_robot.clone().cpu().numpy()
-        self.t_2_target[self.pos] = t_2_robot.clone().cpu().numpy()
-        self.t_1_robot[self.pos] = t_1_robot.clone().cpu().numpy()
-        self.t_2_robot[self.pos] = t_2_robot.clone().cpu().numpy()
+        self.temp_info[self.pos] = temp_info.clone().cpu().numpy()
+
         self.pos += 1
         if self.pos == self.buffer_size:
             self.full = True  
@@ -354,10 +343,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
                 "log_probs",
                 "advantages",
                 "returns",
-                "t_1_target",
-                "t_2_target",
-                "t_1_robot",
-                "t_2_robot"
+                "temp_info"
             ]
 
             # this is for flat data in buffer
@@ -386,9 +372,6 @@ class TempRolloutBuffer_variant1(BaseBuffer):
             self.log_probs[batch_inds].flatten(),
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
-            self.t_1_target[batch_inds],
-            self.t_2_target[batch_inds],
-            self.t_1_robot[batch_inds],
-            self.t_2_robot[batch_inds],
+            self.temp_info[:, batch_inds], # node * dim
         )
         return Temp_RolloutBufferSamples(*tuple(map(self.to_torch, data)))

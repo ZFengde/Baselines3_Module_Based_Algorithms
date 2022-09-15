@@ -162,6 +162,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
+                    # TODO, shouldn't zeros initial
                     self.t_1_robot[idx] = np.zeros((1, self.robot_info_dim))
                     self.t_2_robot[idx] = np.zeros((1, self.robot_info_dim))
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
