@@ -77,11 +77,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             buffer_size=self.n_steps,
             observation_space=self.observation_space,
             action_space=self.action_space,
+            node_num=4,
             device=self.device,
             gae_lambda=self.gae_lambda,
             gamma=self.gamma,
             n_envs=self.n_envs,
-            robot_dim = 6,
         )
         self.policy = self.policy_class(  # pytype:disable=not-instantiable
             self.observation_space,
@@ -121,7 +121,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
-                temp_info = self.to_tensor_pack(self.t_1_target, self.t_2_target, self.t_1_robot, self.t_2_robot) # 4, 6, 2/dim 
+                temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
                 # TODO, important part
                 actions, values, log_probs = self.policy(obs_tensor, temp_info) 
@@ -150,7 +150,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 actions = actions.reshape(-1, 1)
 
             # TODO, self.temp_buffer_update
-            self.temp_buffer_update(new_obs)
+            self.temp_info_update(new_obs)
 
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
@@ -164,7 +164,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     self.temp_buffer_reset(idx)
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
-                        terminal_value = self.policy.predict_values(terminal_obs, temp_info[:, idx])
+                        terminal_value = self.policy.predict_values(terminal_obs, temp_info[idx])
                     rewards[idx] += self.gamma * terminal_value
                 if done and infos[idx].get('Success') == 'Yes':
                     ep_num_success += 1
@@ -248,13 +248,13 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         for ele in args:
             ele = obs_as_tensor(ele, device=self.device)
             output.append(ele)
-        output = th.stack(output)
-        return output
+        output = th.stack(output, dim=1)
+        return output # batch, node_num, dim
 
-    def temp_buffer_update(self, new_obs): # this target setting is only for general mujoco envs
+    def temp_info_update(self, new_obs): # this target setting is only for general mujoco envs
         self.t_2_target = self.t_1_target
 
-        self.t_1_target = new_obs[:, :2] # since target is always x, y
+        self.t_1_target = new_obs[:, :2] + (1, 0) # since target is always x, y
         self.t_1_target = np.pad(self.t_1_target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
 
         self.t_2_robot = self.t_1_robot

@@ -207,11 +207,11 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         buffer_size,
         observation_space,
         action_space,
+        node_num,
         device,
         gae_lambda: float = 1,
         gamma: float = 0.99,
         n_envs: int = 1,
-        robot_dim: int = 0,
     ):
         super(TempRolloutBuffer_variant1, self).__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs)
         self.buffer_size = buffer_size
@@ -221,7 +221,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.gae_lambda = gae_lambda
         self.gamma = gamma
         self.n_envs = n_envs
-        self.robot_dim = robot_dim
+        self.node_num = node_num
 
         # self.pos refer the current step position in buffer
         self.pos = 0
@@ -230,7 +230,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.action_dim = action_space.shape[0]
         self.observations, self.actions, self.rewards, self.advantages = None, None, None, None
         self.returns, self.episode_starts, self.values, self.log_probs = None, None, None, None
-        self.t_1_target, self.t_2_target, self.t_1_robot, self.t_2_robot = None, None, None, None
+        self.temp_info = None
         self.generator_ready = False
         self.reset()
 
@@ -238,7 +238,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.pos = 0
         self.full = False
 
-        self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32)
+        self.observations = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32) # buffer_pos, batch, dim
         self.actions = np.zeros((self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32)
         self.rewards = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.returns = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
@@ -246,8 +246,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.values = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
-        # TODO, reset didn't test here
-        self.temp_info = []
+        self.temp_info = np.zeros((self.buffer_size, self.n_envs, self.node_num) + self.obs_shape, dtype=np.float32) # buffer_pos, batch, dim
 
         self.generator_ready = False
 
@@ -318,13 +317,13 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         if isinstance(self.observation_space, spaces.Discrete):
             obs = obs.reshape((self.n_envs,) + self.obs_shape)
 
-        self.observations[self.pos] = np.array(obs).copy()
+        self.observations[self.pos] = np.array(obs).copy() # buffer_pos, batch, dim
         self.actions[self.pos] = np.array(action).copy()
         self.rewards[self.pos] = np.array(reward).copy()
         self.episode_starts[self.pos] = np.array(episode_start).copy()
         self.values[self.pos] = value.clone().cpu().numpy().flatten()
         self.log_probs[self.pos] = log_prob.clone().cpu().numpy()
-        self.temp_info[self.pos] = temp_info.clone().cpu().numpy()
+        self.temp_info[self.pos] = temp_info.clone().cpu().numpy() # buffer_pos, node, batch, dim
 
         self.pos += 1
         if self.pos == self.buffer_size:
@@ -366,12 +365,12 @@ class TempRolloutBuffer_variant1(BaseBuffer):
 
     def _get_samples(self, batch_inds):
         data = (
-            self.observations[batch_inds],
-            self.actions[batch_inds],
-            self.values[batch_inds].flatten(),
+            self.observations[batch_inds], # 2048 * 6 -> 12288*113
+            self.actions[batch_inds], # 12288 * 8
+            self.values[batch_inds].flatten(), 
             self.log_probs[batch_inds].flatten(),
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
-            self.temp_info[:, batch_inds], # node * dim
+            self.temp_info[batch_inds], # 12288 * 6 * 113
         )
-        return Temp_RolloutBufferSamples(*tuple(map(self.to_torch, data)))
+        return Temp_RolloutBufferSamples_variant1(*tuple(map(self.to_torch, data)))

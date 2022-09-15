@@ -166,8 +166,7 @@ class GNN_PPO_variant1(OnPolicyAlgorithm):
 
                 values, log_prob, entropy = self.policy.evaluate_actions(
                                                                         rollout_data.observations, 
-                                                                        rollout_data.t_1_robots,
-                                                                        rollout_data.t_2_robots,
+                                                                        rollout_data.temp_info,
                                                                         actions)
                 values = values.flatten()
                 # Normalize advantage
@@ -297,10 +296,11 @@ class GNN_PPO_variant1(OnPolicyAlgorithm):
             
             while True:
                 with th.no_grad():
+                    # TODO
                     temp_1 = obs_as_tensor(t_1_robot_test, self.device)
                     temp_2 = obs_as_tensor(t_2_robot_test, self.device)
                     obs_tensor = obs_as_tensor(obs, self.device).squeeze()
-                    action, _, _ = self.policy(obs_tensor, temp_1, temp_2, deterministic=True)
+                    action, _, _ = self.policy(obs_tensor, self.policy, deterministic=True)
                 action = action.unsqueeze(dim=0).cpu().numpy()
 
                 clipped_action = np.clip(action, self.env.action_space.low, self.env.action_space.high)
