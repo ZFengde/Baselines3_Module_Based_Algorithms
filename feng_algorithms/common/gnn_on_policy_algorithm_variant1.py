@@ -254,7 +254,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
     def temp_info_update(self, new_obs): # this target setting is only for general mujoco envs
         self.t_2_target = self.t_1_target
 
-        self.t_1_target = new_obs[:, :2] + (1, 0) # since target is always x, y
+        self.t_1_target = new_obs[:, :2] + (np.random.rand(), 0) # since target is always x, y
         self.t_1_target = np.pad(self.t_1_target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
 
         self.t_2_robot = self.t_1_robot

@@ -19,7 +19,7 @@ def learn():
 	model = GNN_PPO_variant1('GnnPolicy_variant1', env, verbose=1, tensorboard_log=logdir, use_sde=False)
 	TIMESTEPS = 10000
 	iters = 0
-	for i in range(407):
+	for i in range(1000):
 		iters += 1
 		model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"GNN_PPO_variant1")
 		model.save(models_dir, TIMESTEPS*iters)
