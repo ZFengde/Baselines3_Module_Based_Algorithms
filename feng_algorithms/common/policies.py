@@ -708,18 +708,17 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
             if features_extractor_class == NatureCNN:
                 net_arch = []
             else:
-                net_arch = [dict(pi=[64, 64], vf=[64, 64])]
+                net_arch = [dict(pi=[128, 128], vf=[128, 128])]
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
         self.ortho_init = ortho_init
-        self.graph_out_dim = 6
+        self.graph_out_dim = 32
         
         # TODO, need to check if it's necessary
         observation_space = self.observation_space
         self.features_extractor = features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
         # self.features_dim = self.features_extractor.features_dim
-        self.features_dim = 32
 
         self.normalize_images = normalize_images
         self.log_std_init = log_std_init

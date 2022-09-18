@@ -25,14 +25,14 @@ def learn():
 		model.save(models_dir, TIMESTEPS*iters)
 
 def test():
-	env_id = 'Ant-v3'
-	env = make_vec_env(env_id, n_envs=1, seed=0, vec_env_cls=SubprocVecEnv)
+	env = gym.make('Ant-v3', exclude_current_positions_from_observation=False)
 	model = GNN_PPO_variant1('GnnPolicy_variant1', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO_variant1/{env_id}/models/1662931524/1320000')
+	model.load(f'./GNN_PPO_variant1/Ant-v3/models/1663519807/50000')
 	model.test(100)
 
+
 if __name__ == '__main__':
-	learn()
+	test()
 
 
 

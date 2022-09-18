@@ -123,7 +123,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             with th.no_grad():
                 temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                # TODO, important part
                 actions, values, log_probs = self.policy(obs_tensor, temp_info) 
             actions = actions.cpu().numpy()
 
@@ -149,7 +148,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            # TODO, self.temp_buffer_update
             self.temp_info_update(new_obs)
 
             # Handle timeout by bootstraping with value function
@@ -160,14 +158,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
-                    # TODO, self.temp_buffer_reset(idx)
                     self.temp_buffer_reset(idx)
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs, temp_info[idx])
                     rewards[idx] += self.gamma * terminal_value
-                if done and infos[idx].get('Success') == 'Yes':
-                    ep_num_success += 1
 
             rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_info)
             self._last_obs = new_obs
@@ -254,7 +249,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
     def temp_info_update(self, new_obs): # this target setting is only for general mujoco envs
         self.t_2_target = self.t_1_target
 
-        self.t_1_target = new_obs[:, :2] + (np.random.rand(), 0) # since target is always x, y
+        self.t_1_target = new_obs[:, :2] + (np.random.rand(), 0) # TODO, this is t_1 target, but what about t_0 target?
         self.t_1_target = np.pad(self.t_1_target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
 
         self.t_2_robot = self.t_1_robot
@@ -267,3 +262,34 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.t_2_target[index] = np.zeros_like(self.t_2_target[index])
         self.t_1_robot[index] = np.zeros_like(self.t_1_robot[index])
         self.t_2_robot[index] = np.zeros_like(self.t_2_robot[index])
+
+    def test(self, test_episode):
+        self.rollout_buffer.reset()
+        last_obs = self.env.reset().squeeze()
+        for episode_num in range(test_episode):
+            ep_reward = 0
+            ep_len = 0
+            while True:
+                self.env.render()
+                with th.no_grad():
+                    temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
+                    obs_tensor = obs_as_tensor(last_obs, self.device)
+                    action, _, _ = self.policy(obs_tensor, temp_info.squeeze()) 
+                action = action.cpu().numpy()
+
+                clipped_actions = action
+                if isinstance(self.action_space, gym.spaces.Box):
+                    clipped_actions = np.clip(action, self.action_space.low, self.action_space.high)
+
+                new_ob, reward, done, info = self.env.step(clipped_actions)
+                last_obs = new_ob.squeeze()
+
+                self.temp_info_update(new_ob)
+                self.temp_buffer_reset(0)
+                ep_reward += reward
+                ep_len += 1
+                print(ep_len)
+                if done:
+                    print(ep_len, ep_reward)
+                    break
+        return True

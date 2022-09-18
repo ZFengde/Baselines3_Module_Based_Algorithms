@@ -280,38 +280,7 @@ class GNN_PPO_variant1(OnPolicyAlgorithm):
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
             print(f'logging to {models_dir}/{training_step}')
-        th.save(self.policy.state_dict(), f'{models_dir}/{training_step}')
+        th.save(self.policy.state_dict(), f'{models_dir}/{training_step}') 
 
     def load(self, path):
-            self.policy.load_state_dict(th.load(path))
-
-    def test(self, test_episode):
-        self.rollout_buffer.reset()
-        obs = self.env.reset()
-        for episode_num in range(test_episode):
-            t_1_robot_test = np.zeros(6)
-            t_2_robot_test = np.zeros(6)
-            ep_reward = 0
-            ep_len = 0
-            
-            while True:
-                with th.no_grad():
-                    # TODO
-                    temp_1 = obs_as_tensor(t_1_robot_test, self.device)
-                    temp_2 = obs_as_tensor(t_2_robot_test, self.device)
-                    obs_tensor = obs_as_tensor(obs, self.device).squeeze()
-                    action, _, _ = self.policy(obs_tensor, self.policy, deterministic=True)
-                action = action.unsqueeze(dim=0).cpu().numpy()
-
-                clipped_action = np.clip(action, self.env.action_space.low, self.env.action_space.high)
-                obs, reward, done, _ = self.env.step(clipped_action)
-
-                t_2_robot_test = t_1_robot_test
-                t_1_robot_test = obs[0][0: 6]
-
-                ep_reward += reward
-                ep_len += 1
-                if done:
-                    print(ep_len, ep_reward)
-                    break
-        return True
+        self.policy.load_state_dict(th.load(path))
