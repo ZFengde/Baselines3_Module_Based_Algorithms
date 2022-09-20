@@ -21,7 +21,8 @@ class Temp_RolloutBufferSamples_variant1(NamedTuple):
     old_log_prob: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
-    temp_info: list
+    target: torch.Tensor
+    temp_info: torch.Tensor
 
 class TempRolloutBuffer(BaseBuffer):
     def __init__(
@@ -230,7 +231,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.action_dim = action_space.shape[0]
         self.observations, self.actions, self.rewards, self.advantages = None, None, None, None
         self.returns, self.episode_starts, self.values, self.log_probs = None, None, None, None
-        self.temp_info = None
+        self.temp_info, self.target = None, None
         self.generator_ready = False
         self.reset()
 
@@ -246,6 +247,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.values = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.log_probs = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
         self.advantages = np.zeros((self.buffer_size, self.n_envs), dtype=np.float32)
+        self.target = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32)
         self.temp_info = np.zeros((self.buffer_size, self.n_envs, self.node_num) + self.obs_shape, dtype=np.float32) # buffer_pos, batch, dim
 
         self.generator_ready = False
@@ -296,7 +298,8 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         episode_start: np.ndarray,
         value: torch.Tensor,
         log_prob: torch.Tensor,
-        temp_info: list,
+        target: torch.Tensor,
+        temp_info: torch.Tensor,
     ):
         """
         :param obs: Observation
@@ -323,6 +326,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
         self.episode_starts[self.pos] = np.array(episode_start).copy()
         self.values[self.pos] = value.clone().cpu().numpy().flatten()
         self.log_probs[self.pos] = log_prob.clone().cpu().numpy()
+        self.target[self.pos] = target.clone().cpu().numpy()
         self.temp_info[self.pos] = temp_info.clone().cpu().numpy() # buffer_pos, node, batch, dim
 
         self.pos += 1
@@ -342,6 +346,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
                 "log_probs",
                 "advantages",
                 "returns",
+                "target",
                 "temp_info"
             ]
 
@@ -371,6 +376,7 @@ class TempRolloutBuffer_variant1(BaseBuffer):
             self.log_probs[batch_inds].flatten(),
             self.advantages[batch_inds].flatten(),
             self.returns[batch_inds].flatten(),
+            self.target[batch_inds],
             self.temp_info[batch_inds], # 12288 * 6 * 113
         )
         return Temp_RolloutBufferSamples_variant1(*tuple(map(self.to_torch, data)))

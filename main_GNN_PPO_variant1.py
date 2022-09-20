@@ -7,7 +7,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from feng_algorithms.GNN_PPO_variant1.GNN_PPO_variant1 import GNN_PPO_variant1
 
 def learn():
-	env_id = 'Ant-v3'
+	env_id = 'HalfCheetah-v3'
 	models_dir = f"GNN_PPO_variant1/{env_id}/models/{int(time.time())}/"
 	logdir = f"GNN_PPO_variant1/{env_id}/logs/{int(time.time())}/"
 	if not os.path.exists(models_dir):
@@ -32,7 +32,7 @@ def test():
 
 
 if __name__ == '__main__':
-	test()
+	learn()
 
 
 

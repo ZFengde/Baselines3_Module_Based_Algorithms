@@ -121,9 +121,11 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
+                # This is for generate forward target
+                target = self.target_generator(self._last_obs)
                 temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor, temp_info) 
+                actions, values, log_probs = self.policy(obs_tensor, target, temp_info) 
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -148,7 +150,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            self.temp_info_update(new_obs)
+            self.temp_info_update(self._last_obs, target.cpu().numpy())
 
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
@@ -160,17 +162,19 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 ):
                     self.temp_buffer_reset(idx)
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
+                    terminal_target = np.pad(infos[idx]["terminal_observation"][:2] + (np.random.rand(), 0), (0, self.env.observation_space.shape[0]-2))
+                    terminal_target = obs_as_tensor(terminal_target, device=self.device)
                     with th.no_grad():
-                        terminal_value = self.policy.predict_values(terminal_obs, temp_info[idx])
+                        terminal_value = self.policy.predict_values(terminal_obs, terminal_target, temp_info[idx])
                     rewards[idx] += self.gamma * terminal_value
 
-            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, temp_info)
+            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, target, temp_info)
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), temp_info)
+            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), self.target_generator(new_obs), temp_info)
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 
@@ -246,22 +250,25 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         output = th.stack(output, dim=1)
         return output # batch, node_num, dim
 
-    def temp_info_update(self, new_obs): # this target setting is only for general mujoco envs
+    def temp_info_update(self, last_obs, last_target): # this target setting is only for general mujoco envs
         self.t_2_target = self.t_1_target
-
-        self.t_1_target = new_obs[:, :2] + (np.random.rand(), 0) # TODO, this is t_1 target, but what about t_0 target?
-        self.t_1_target = np.pad(self.t_1_target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
+        self.t_1_target = last_target 
 
         self.t_2_robot = self.t_1_robot
-        self.t_1_robot = new_obs
+        self.t_1_robot = last_obs
 
     def temp_buffer_reset(self, index):
-        # which is wrong, but should be able to work, amend later
+        # TODO, which is wrong, but should be able to work, amend later
         # which won't cause huge difference
         self.t_1_target[index] = np.zeros_like(self.t_1_target[index])
         self.t_2_target[index] = np.zeros_like(self.t_2_target[index])
         self.t_1_robot[index] = np.zeros_like(self.t_1_robot[index])
         self.t_2_robot[index] = np.zeros_like(self.t_2_robot[index])
+
+    def target_generator(self, obs):
+        target = obs[:, :2] + (np.random.rand(), 0)
+        target = np.pad(target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
+        return obs_as_tensor(target, device=self.device)
 
     def test(self, test_episode):
         self.rollout_buffer.reset()
@@ -284,7 +291,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 new_ob, reward, done, info = self.env.step(clipped_actions)
                 last_obs = new_ob.squeeze()
 
-                self.temp_info_update(new_ob)
+                # self.temp_info_update(new_ob, target)
                 self.temp_buffer_reset(0)
                 ep_reward += reward
                 ep_len += 1

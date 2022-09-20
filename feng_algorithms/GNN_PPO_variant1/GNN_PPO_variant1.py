@@ -166,6 +166,7 @@ class GNN_PPO_variant1(OnPolicyAlgorithm):
 
                 values, log_prob, entropy = self.policy.evaluate_actions(
                                                                         rollout_data.observations, 
+                                                                        rollout_data.target, 
                                                                         rollout_data.temp_info,
                                                                         actions)
                 values = values.flatten()

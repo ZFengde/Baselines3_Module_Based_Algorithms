@@ -843,7 +843,7 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
-    def forward(self, obs: th.Tensor, temp_info: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def forward(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -854,9 +854,9 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
         if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, temp_info)
+            features = self.batch_gnn_process(obs, target, temp_info)
         else:
-            features = self.gnn_process(obs, temp_info)
+            features = self.gnn_process(obs, target, temp_info)
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -890,7 +890,8 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         else:
             raise ValueError("Invalid action distribution")
 
-    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor:
+    def _predict(self, observation: th.Tensor, deterministic: bool = False) -> th.Tensor: 
+        # TODO, compared to forward, this will only generate actions, save computing power, but nontrivial
         """
         Get the action according to the policy for a given observation.
 
@@ -900,7 +901,7 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         """
         return self.get_distribution(observation).get_actions(deterministic=deterministic)
 
-    def evaluate_actions(self, obs: th.Tensor, temp_info: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def evaluate_actions(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Evaluate actions according to the current policy,
         given the observations.
@@ -912,9 +913,9 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         """
         # Preprocess the observation if needed
         if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, temp_info)
+            features = self.batch_gnn_process(obs, target, temp_info)
         else:
-            features = self.gnn_process(obs, temp_info)
+            features = self.gnn_process(obs, target, temp_info)
         # features = self.extract_features(obs)
         latent_pi, latent_vf = self.mlp_extractor(features)
         distribution = self._get_action_dist_from_latent(latent_pi)
@@ -922,7 +923,7 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         values = self.value_net(latent_vf)
         return values, log_prob, distribution.entropy()
 
-    def get_distribution(self, obs, temp_info: th.Tensor) -> Distribution:
+    def get_distribution(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor) -> Distribution:
         """
         Get the current policy distribution given the observations.
 
@@ -931,13 +932,13 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         """
         # features = self.extract_features(obs)
         if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, temp_info)
+            features = self.batch_gnn_process(obs, target, temp_info)
         else:
-            features = self.gnn_process(obs, temp_info)
+            features = self.gnn_process(obs, target, temp_info)
         latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(latent_pi)
 
-    def predict_values(self, obs: th.Tensor, temp_info: th.Tensor) -> th.Tensor:
+    def predict_values(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor) -> th.Tensor:
         """
         Get the estimated values according to the current policy given the observations.
 
@@ -946,30 +947,23 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         """
         # features = self.extract_features(obs)
         if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, temp_info)
+            features = self.batch_gnn_process(obs, target, temp_info)
         else:
-            features = self.gnn_process(obs, temp_info)
+            features = self.gnn_process(obs, target, temp_info)
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
-    def batch_gnn_process(self, obss, temp_info): # batch * dim, nodes * batch * dim | 6*113, 4*6*113
-        target_poss = obss[:, :2]
-        # TODO, should unpack package here
-
-        target_infos = nn.functional.pad(target_poss, (0, self.observation_space.shape[0]-2)).unsqueeze(0)
+    def batch_gnn_process(self, obss, targets, temp_info): # batch * dim, nodes * batch * dim | 6*113, 4*6*113
         temp_info = th.transpose(temp_info, 0, 1) # batch, node_num, dim -> node_num, batch, dim
-        nodes_infos = th.cat((temp_info[:2], target_infos, temp_info[2:], obss.unsqueeze(0)), dim=0).float() # nodes*batch*dim = 6*6*dim
+        nodes_infos = th.cat((temp_info[:2], targets.unsqueeze(0), temp_info[2:], obss.unsqueeze(0)), dim=0).float() # nodes*batch*dim = 6*6*dim
 
         graph_output = th.tanh(self.gnn(nodes_infos)) # nodes, batch, out_dim
         graph_output = th.transpose(graph_output, 0, 1) # batch, nodes, out_dim
         features = th.flatten(graph_output, start_dim=1) # 6, 32
         return features     
 
-    def gnn_process(self, obs, temp_info): # 113, 4*113
-        target_pos = obs[:2]
+    def gnn_process(self, obs, target, temp_info): # 113, 4*113
 
-        target_info = nn.functional.pad(target_pos, (0, self.observation_space.shape[0]-2)).unsqueeze(0) # 1, 113
-        node_info = th.cat((temp_info[:2], target_info, temp_info[2:], obs.unsqueeze(0)), dim=0).float() # 6, 113
-
+        node_info = th.cat((temp_info[:2], target.unsqueeze(0), temp_info[2:], obs.unsqueeze(0)), dim=0).float() # 6, 113
         features = th.tanh(self.gnn(node_info)).flatten() # 4, 6 --> 4, 8 --> 32
         return features # 6*6 = 36
