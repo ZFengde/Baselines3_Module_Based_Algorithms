@@ -268,6 +268,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
     def target_generator(self, obs):
         target = obs[:, :2] + (np.random.rand(), 0)
         target = np.pad(target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
+        # target = obs[:2] + (np.random.rand(), 0)
+        # target = np.pad(target, (0, self.env.observation_space.shape[0]-2)) # zeros padding so that target and agent have same dimension
         return obs_as_tensor(target, device=self.device)
 
     def test(self, test_episode):
@@ -279,9 +281,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             while True:
                 self.env.render()
                 with th.no_grad():
+                    target = self.target_generator(last_obs)
                     temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
                     obs_tensor = obs_as_tensor(last_obs, self.device)
-                    action, _, _ = self.policy(obs_tensor, temp_info.squeeze()) 
+                    action, _, _ = self.policy(obs_tensor, target, temp_info.squeeze()) 
                 action = action.cpu().numpy()
 
                 clipped_actions = action
@@ -295,7 +298,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.temp_buffer_reset(0)
                 ep_reward += reward
                 ep_len += 1
-                print(ep_len)
                 if done:
                     print(ep_len, ep_reward)
                     break

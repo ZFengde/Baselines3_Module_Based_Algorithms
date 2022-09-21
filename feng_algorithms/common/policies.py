@@ -45,24 +45,24 @@ class GNN_Layer(nn.Module):
         self.g = graph
         self.in_feat = in_feat
         
-        self.loop_weight =nn.Parameter(th.Tensor(graph.num_nodes(), in_feat, out_feat))
-        self.W = nn.Parameter(th.Tensor(graph.num_edges(), in_feat, out_feat))
-        self.m_bias = nn.Parameter(th.Tensor(graph.num_edges(), 1, out_feat)) # useless
-        self.h_bias = nn.Parameter(th.Tensor(graph.num_nodes(), 1, out_feat)) # useless
+        self.W_uv = nn.Parameter(th.Tensor(graph.num_edges(), in_feat, out_feat))
+        self.W_uu =nn.Parameter(th.Tensor(graph.num_nodes(), in_feat, out_feat))
+        self.B_uv = nn.Parameter(th.Tensor(graph.num_edges(), 1, out_feat)) 
+        self.B_uu = nn.Parameter(th.Tensor(graph.num_nodes(), 1, out_feat))
         self._reset_parameters()
 
     def _reset_parameters(self):
-        nn.init.xavier_uniform_(self.loop_weight, gain=nn.init.calculate_gain('tanh'))
-        nn.init.uniform_(self.W, -1/math.sqrt(self.in_feat), 1/math.sqrt(self.in_feat))
-        nn.init.zeros_(self.m_bias)
-        nn.init.zeros_(self.h_bias)
+        nn.init.uniform_(self.W_uv, -1/math.sqrt(self.in_feat), 1/math.sqrt(self.in_feat))
+        nn.init.xavier_uniform_(self.W_uu, gain=nn.init.calculate_gain('tanh'))
+        nn.init.zeros_(self.B_uv)
+        nn.init.zeros_(self.B_uu)
 
     def message(self, edges):
         if edges.src['h'].dim() == 2:
             x = edges.src['h'].view(-1, 1, self.in_feat)
-            message = th.bmm(x, self.W) + self.m_bias
+            message = th.bmm(x, self.W_uv) + self.B_uv
         elif edges.src['h'].dim() == 3:
-            message = th.bmm(edges.src['h'], self.W) + self.m_bias
+            message = th.bmm(edges.src['h'], self.W_uv) + self.B_uv
         return {'m' : message}
 
     def forward(self, feat):
@@ -72,11 +72,13 @@ class GNN_Layer(nn.Module):
             # self-loop
             if self.g.srcdata['h'].dim() == 2:
                 x = self.g.srcdata['h'].view(-1, 1, self.in_feat)
-                loop = th.bmm(x,  self.loop_weight)
+                loop = th.bmm(x,  self.W_uu)
             elif self.g.srcdata['h'].dim() == 3:
-                loop = th.bmm(self.g.srcdata['h'], self.loop_weight)
+                loop = th.bmm(self.g.srcdata['h'], self.W_uu)
+
+            # TODO, need to test different reduce function
             self.g.update_all(self.message, fn.sum('m', 'h'))
-            h = self.g.dstdata['h'] + self.h_bias + loop # 4, 6, 8, node * batch * dim
+            h = self.g.dstdata['h'] + self.B_uu + loop # 4, 6, 8, node * batch * dim
             return h.squeeze()
 
 class GNN(nn.Module):
@@ -255,7 +257,6 @@ class ActorCriticGnnPolicy(BasePolicy):
         # Init weights: use orthogonal initialization
         # with small initial weight for the output
         if self.ortho_init:
-            # TODO: check for features_extractor
             # Values from stable-baselines.
             # features_extractor/mlp values are
             # originally from openai/baselines (default gains/init_scales).
@@ -551,7 +552,6 @@ class ActorCriticRnnPolicy(BasePolicy):
         # Init weights: use orthogonal initialization
         # with small initial weight for the output
         if self.ortho_init:
-            # TODO: check for features_extractor
             # Values from stable-baselines.
             # features_extractor/mlp values are
             # originally from openai/baselines (default gains/init_scales).
@@ -708,14 +708,13 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
             if features_extractor_class == NatureCNN:
                 net_arch = []
             else:
-                net_arch = [dict(pi=[128, 128], vf=[128, 128])]
+                net_arch = [dict(pi=[64, 64], vf=[64, 64])]
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
         self.ortho_init = ortho_init
         self.graph_out_dim = 32
         
-        # TODO, need to check if it's necessary
         observation_space = self.observation_space
         self.features_extractor = features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
         # self.features_dim = self.features_extractor.features_dim
@@ -748,7 +747,8 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         
         self.gnn = GNN(self.observation_space.shape[0], self.graph_out_dim, self.g) # input = 6 * 6, output = 6 * 6, 36
 
-        self.features_dim = self.g.num_nodes() * self.graph_out_dim # this is the gnn output dimension
+        # self.features_dim = self.g.num_nodes() * self.graph_out_dim # this is the gnn output dimension
+        self.features_dim = self.graph_out_dim # this is the gnn output dimension
 
         self._build(lr_schedule)
 
@@ -828,7 +828,6 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         # Init weights: use orthogonal initialization
         # with small initial weight for the output
         if self.ortho_init:
-            # TODO: check for features_extractor
             # Values from stable-baselines.
             # features_extractor/mlp values are
             # originally from openai/baselines (default gains/init_scales).
@@ -958,12 +957,16 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         nodes_infos = th.cat((temp_info[:2], targets.unsqueeze(0), temp_info[2:], obss.unsqueeze(0)), dim=0).float() # nodes*batch*dim = 6*6*dim
 
         graph_output = th.tanh(self.gnn(nodes_infos)) # nodes, batch, out_dim
-        graph_output = th.transpose(graph_output, 0, 1) # batch, nodes, out_dim
-        features = th.flatten(graph_output, start_dim=1) # 6, 32
+        graph_output = th.transpose(graph_output, 0, 1) # batch, nodes, out_dim 6, 6, 32
+        # TODO, here can be changed, rather than simple flatten and concatenated
+        # features = th.flatten(graph_output, start_dim=1) # batch, flatten_out_dim = 6, 6, 32 -> 6, 192
+        features = th.mean(graph_output, dim=1) # batch, flatten_out_dim = 6, 6, 32 -> 6, 192
         return features     
 
     def gnn_process(self, obs, target, temp_info): # 113, 4*113
 
         node_info = th.cat((temp_info[:2], target.unsqueeze(0), temp_info[2:], obs.unsqueeze(0)), dim=0).float() # 6, 113
-        features = th.tanh(self.gnn(node_info)).flatten() # 4, 6 --> 4, 8 --> 32
-        return features # 6*6 = 36
+        graph_output = th.tanh(self.gnn(node_info)) # 6, 32, nodes * dim
+        # features = th.tanh(self.gnn(node_info)).flatten() 
+        features = th.mean(graph_output, dim=0)
+        return features 

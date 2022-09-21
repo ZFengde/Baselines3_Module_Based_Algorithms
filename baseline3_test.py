@@ -10,7 +10,7 @@ from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
 def learn():
-	env_id = 'HalfCheetah-v3'
+	env_id = 'Ant-v3'
 	models_dir = f"Baselines3_PPO/{env_id}/models/{int(time.time())}/"
 	logdir = f"Baselines3_PPO/{env_id}/logs/{int(time.time())}/"
 
