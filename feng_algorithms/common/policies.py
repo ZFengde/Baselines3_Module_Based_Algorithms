@@ -708,7 +708,8 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
             if features_extractor_class == NatureCNN:
                 net_arch = []
             else:
-                net_arch = [dict(pi=[64, 64], vf=[64, 64])]
+                # net_arch = [dict(pi=[64, 64], vf=[64, 64])]
+                net_arch = [dict(pi=[128, 128], vf=[128, 128])]
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
@@ -957,7 +958,7 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         nodes_infos = th.cat((temp_info[:2], targets.unsqueeze(0), temp_info[2:], obss.unsqueeze(0)), dim=0).float() # nodes*batch*dim = 6*6*dim
 
         graph_output = th.tanh(self.gnn(nodes_infos)) # nodes, batch, out_dim
-        graph_output = th.transpose(graph_output, 0, 1) # batch, nodes, out_dim 6, 6, 32
+        graph_output = th.transpose(graph_output, 0, 1) # nodes, batch, out_dim --> batch, nodes, out_dim 6, 6, 32
         # TODO, here can be changed, rather than simple flatten and concatenated
         # features = th.flatten(graph_output, start_dim=1) # batch, flatten_out_dim = 6, 6, 32 -> 6, 192
         features = th.mean(graph_output, dim=1) # batch, flatten_out_dim = 6, 6, 32 -> 6, 192

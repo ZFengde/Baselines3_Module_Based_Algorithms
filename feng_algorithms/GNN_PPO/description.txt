@@ -1,0 +1,2 @@
+This script is the GNN algorithm for navigation control,
+use one node for representing fixed target
