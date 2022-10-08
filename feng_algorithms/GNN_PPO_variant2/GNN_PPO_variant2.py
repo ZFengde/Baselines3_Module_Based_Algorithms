@@ -19,7 +19,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
 
     policy_aliases: Dict[str, Type[BasePolicy]] = {
         "MlpPolicy": ActorCriticPolicy,
-        "GnnPolicy_variant1": ActorCriticGnnPolicy_variant2,
+        "GnnPolicy_variant2": ActorCriticGnnPolicy_variant2,
         "CnnPolicy": ActorCriticCnnPolicy,
         "MultiInputPolicy": MultiInputActorCriticPolicy,
     }
@@ -29,13 +29,9 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
         policy: Union[str, Type[ActorCriticGnnPolicy_variant2]],
         env: Union[GymEnv, str],
         learning_rate: Union[float, Schedule] = 3e-4,
-        # n_steps: int = 2048,
-        # n_steps: int = 512,
-        # batch_size: int = 64,
-        # n_epochs: int = 10,
-        n_steps: int = 8,
-        batch_size: int = 4,
-        n_epochs: int = 2,
+        n_steps: int = 2048,
+        batch_size: int = 64,
+        n_epochs: int = 10,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
         clip_range: Union[float, Schedule] = 0.2,
@@ -44,6 +40,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
         ent_coef: float = 0.0,
         vf_coef: float = 0.5,
         max_grad_norm: float = 0.5,
+        robot_info_dim: int = 6,
         use_sde: bool = False,
         sde_sample_freq: int = -1,
         target_kl: Optional[float] = None,
@@ -66,6 +63,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
             ent_coef=ent_coef,
             vf_coef=vf_coef,
             max_grad_norm=max_grad_norm,
+            robot_info_dim=robot_info_dim,
             use_sde=use_sde,
             sde_sample_freq=sde_sample_freq,
             tensorboard_log=tensorboard_log,
@@ -114,11 +112,10 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
         self.clip_range_vf = clip_range_vf
         self.normalize_advantage = normalize_advantage
         self.target_kl = target_kl
+        self.robot_info_dim = robot_info_dim
 
-        self.t_1_target = np.zeros((self.n_envs, self.observation_space.shape[0]))
-        self.t_2_target = np.zeros((self.n_envs, self.observation_space.shape[0]))
-        self.t_1_robot = np.zeros((self.n_envs, self.observation_space.shape[0]))
-        self.t_2_robot = np.zeros((self.n_envs, self.observation_space.shape[0]))
+        self.t_1_robot = np.zeros((self.n_envs, self.robot_info_dim))
+        self.t_2_robot = np.zeros((self.n_envs, self.robot_info_dim))
 
         if _init_setup_model:
             self._setup_model()

@@ -11,7 +11,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
 from stable_baselines3.common.vec_env import VecEnv
-from feng_algorithms.common.buffers import TempRolloutBuffer_variant1
+from feng_algorithms.common.buffers import TempRolloutBuffer
 from feng_algorithms.common.policies import ActorCriticGnnPolicy
 
 class OnPolicyAlgorithm(BaseAlgorithm):
@@ -27,6 +27,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         ent_coef: float,
         vf_coef: float,
         max_grad_norm: float,
+        robot_info_dim: int,
         use_sde: bool,
         sde_sample_freq: int,
         tensorboard_log: Optional[str] = None,
@@ -62,6 +63,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
         self.max_grad_norm = max_grad_norm
+        self.robot_info_dim = robot_info_dim
         self.rollout_buffer = None
 
         if _init_setup_model:
@@ -71,7 +73,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer_variant1
+        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer
 
         self.rollout_buffer = buffer_cls(
             buffer_size=self.n_steps,
@@ -98,7 +100,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self,
         env: VecEnv,
         callback: BaseCallback,
-        rollout_buffer: TempRolloutBuffer_variant1,
+        rollout_buffer: TempRolloutBuffer,
         n_rollout_steps: int,
     ) -> bool:
 
@@ -121,11 +123,10 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
-                # This is for generate forward target
-                target = self.target_generator(self._last_obs)
-                temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
+                temp_1 = obs_as_tensor(self.t_1_robot, self.device)
+                temp_2 = obs_as_tensor(self.t_2_robot, self.device)
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor, target, temp_info) 
+                actions, values, log_probs = self.policy(obs_tensor, temp_1, temp_2)
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -150,7 +151,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            self.temp_info_update(self._last_obs, target.cpu().numpy())
+            self.t_2_robot = self.t_1_robot
+            self.t_1_robot = new_obs[:, 0: self.robot_info_dim]
 
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
@@ -160,21 +162,23 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("terminal_observation") is not None
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
-                    self.temp_buffer_reset(idx)
+                   # TODO, shouldn't zeros initial
+                    self.t_1_robot[idx] = np.zeros((1, self.robot_info_dim))
+                    self.t_2_robot[idx] = np.zeros((1, self.robot_info_dim))
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
-                    terminal_target = np.pad(infos[idx]["terminal_observation"][:2] + (np.random.rand(), 0), (0, self.env.observation_space.shape[0]-2))
-                    terminal_target = obs_as_tensor(terminal_target, device=self.device)
                     with th.no_grad():
-                        terminal_value = self.policy.predict_values(terminal_obs, terminal_target, temp_info[idx])
+                        terminal_value = self.policy.predict_values(terminal_obs)
                     rewards[idx] += self.gamma * terminal_value
+                if done and infos[idx].get('Success') == 'Yes':
+                    ep_num_success += 1
 
-            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs, target, temp_info)
+            rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs)
             self._last_obs = new_obs
             self._last_episode_starts = dones
 
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), self.target_generator(new_obs), temp_info)
+            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), self.target_generator(new_obs))
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 
@@ -241,64 +245,3 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         state_dicts = ["policy", "policy.optimizer"]
 
         return state_dicts, []
-
-    def to_tensor_pack(self, *args):
-        output = []
-        for ele in args:
-            ele = obs_as_tensor(ele, device=self.device)
-            output.append(ele)
-        output = th.stack(output, dim=1)
-        return output # batch, node_num, dim
-
-    def temp_info_update(self, last_obs, last_target): # this target setting is only for general mujoco envs
-        self.t_2_target = self.t_1_target
-        self.t_1_target = last_target 
-
-        self.t_2_robot = self.t_1_robot
-        self.t_1_robot = last_obs
-
-    def temp_buffer_reset(self, index):
-        # TODO, which is wrong, but should be able to work, amend later
-        # which won't cause huge difference
-        self.t_1_target[index] = np.zeros_like(self.t_1_target[index])
-        self.t_2_target[index] = np.zeros_like(self.t_2_target[index])
-        self.t_1_robot[index] = np.zeros_like(self.t_1_robot[index])
-        self.t_2_robot[index] = np.zeros_like(self.t_2_robot[index])
-
-    def target_generator(self, obs):
-        target = obs[:, :2] + (np.random.rand(), 0)
-        target = np.pad(target, ((0, 0), (0, self.env.observation_space.shape[0]-2))) # zeros padding so that target and agent have same dimension
-        # target = obs[:2] + (np.random.rand(), 0)
-        # target = np.pad(target, (0, self.env.observation_space.shape[0]-2)) # zeros padding so that target and agent have same dimension
-        return obs_as_tensor(target, device=self.device)
-
-    def test(self, test_episode):
-        self.rollout_buffer.reset()
-        last_obs = self.env.reset().squeeze()
-        for episode_num in range(test_episode):
-            ep_reward = 0
-            ep_len = 0
-            while True:
-                self.env.render()
-                with th.no_grad():
-                    target = self.target_generator(last_obs)
-                    temp_info = self.to_tensor_pack(self.t_2_target, self.t_1_target, self.t_2_robot, self.t_1_robot) # node_id = 0, 1, 3, 4 | target_t-2, t-1, robot_t-2, t-2
-                    obs_tensor = obs_as_tensor(last_obs, self.device)
-                    action, _, _ = self.policy(obs_tensor, target, temp_info.squeeze()) 
-                action = action.cpu().numpy()
-
-                clipped_actions = action
-                if isinstance(self.action_space, gym.spaces.Box):
-                    clipped_actions = np.clip(action, self.action_space.low, self.action_space.high)
-
-                new_ob, reward, done, info = self.env.step(clipped_actions)
-                last_obs = new_ob.squeeze()
-
-                # self.temp_info_update(new_ob, target)
-                self.temp_buffer_reset(0)
-                ep_reward += reward
-                ep_len += 1
-                if done:
-                    print(ep_len, ep_reward)
-                    break
-        return True

@@ -259,6 +259,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
     def temp_buffer_reset(self, index):
         # TODO, which is wrong, but should be able to work, amend later
+        # TODO, why is wrong? I forgot
         # which won't cause huge difference
         self.t_1_target[index] = np.zeros_like(self.t_1_target[index])
         self.t_2_target[index] = np.zeros_like(self.t_2_target[index])
