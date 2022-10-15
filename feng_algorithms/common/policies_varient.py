@@ -1,9 +1,7 @@
 """Policies: abstract base class and concrete implementations."""
 
 import collections
-import copy
 import warnings
-from abc import ABC, abstractmethod
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
@@ -14,6 +12,8 @@ import gym
 import numpy as np
 import torch as th
 from torch import nn
+from RGCN import FuzzyRGCN
+from fuzzy_logic import obs_to_feat, graph_and_fuzzy
 
 from stable_baselines3.common.distributions import (
     BernoulliDistribution,
@@ -33,69 +33,6 @@ from stable_baselines3.common.torch_layers import (
 )
 from stable_baselines3.common.type_aliases import Schedule
 from stable_baselines3.common.policies import BasePolicy
-
-class GNN_Layer(nn.Module):
-    def __init__(
-                self,
-                in_feat,
-                out_feat,
-                graph,
-            ):      
-        super(GNN_Layer, self).__init__()
-        self.g = graph
-        self.in_feat = in_feat
-        
-        self.W_uv = nn.Parameter(th.Tensor(graph.num_edges(), in_feat, out_feat))
-        self.W_uu =nn.Parameter(th.Tensor(graph.num_nodes(), in_feat, out_feat))
-        self.B_uv = nn.Parameter(th.Tensor(graph.num_edges(), 1, out_feat)) 
-        self.B_uu = nn.Parameter(th.Tensor(graph.num_nodes(), 1, out_feat))
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        nn.init.uniform_(self.W_uv, -1/math.sqrt(self.in_feat), 1/math.sqrt(self.in_feat))
-        nn.init.xavier_uniform_(self.W_uu, gain=nn.init.calculate_gain('tanh'))
-        nn.init.zeros_(self.B_uv)
-        nn.init.zeros_(self.B_uu)
-
-    def message(self, edges):
-        if edges.src['h'].dim() == 2:
-            x = edges.src['h'].view(-1, 1, self.in_feat)
-            message = th.bmm(x, self.W_uv) + self.B_uv
-        elif edges.src['h'].dim() == 3:
-            message = th.bmm(edges.src['h'], self.W_uv) + self.B_uv
-        return {'m' : message}
-
-    def forward(self, feat):
-        with self.g.local_scope():
-            self.g.srcdata['h'] = feat # 4, 6, 6, target, t, t-1, t-2
-
-            # self-loop
-            if self.g.srcdata['h'].dim() == 2:
-                x = self.g.srcdata['h'].view(-1, 1, self.in_feat)
-                loop = th.bmm(x,  self.W_uu)
-            elif self.g.srcdata['h'].dim() == 3:
-                loop = th.bmm(self.g.srcdata['h'], self.W_uu)
-
-            # TODO, need to test different reduce function
-            self.g.update_all(self.message, fn.sum('m', 'h'))
-            h = self.g.dstdata['h'] + self.B_uu + loop # 4, 6, 8, node * batch * dim
-            return h.squeeze()
-
-class GNN(nn.Module):
-    def __init__(
-                self,
-                in_feat,
-                out_feat,
-                graph,
-            ):
-        super(GNN, self).__init__()
-        self.layer1 = GNN_Layer(in_feat, 8, graph)
-        self.layer2 = GNN_Layer(8, out_feat, graph)
-
-    def forward(self, features):
-        x = th.tanh(self.layer1(features))
-        x = self.layer2(x)
-        return x
 
 class ActorCriticGnnPolicy_variant2(BasePolicy):
 
@@ -136,12 +73,10 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
             squash_output=squash_output,
         )
 
-        # Default network architecture, from stable-baselines
         if net_arch is None:
             if features_extractor_class == NatureCNN:
                 net_arch = []
             else:
-                # net_arch = [dict(pi=[64, 64], vf=[64, 64])]
                 net_arch = [dict(pi=[128, 128], vf=[128, 128])]
 
         self.net_arch = net_arch
@@ -174,12 +109,13 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
+        # 1 robot, 1 target, 7 obstacles, alltogether 9 nodes, i.e., ID: 0-8
         src_ids = th.tensor([0, 0, 0, 1, 1, 2, 3, 3, 4]) # 6 nodes, then 6, 6, , i.e., nodes, batch, 
         dst_ids = th.tensor([1, 2, 3, 2, 4, 5, 4, 5, 5])
         device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
         self.g = dgl.graph((src_ids, dst_ids)).to(device)
         
-        self.gnn = GNN(self.observation_space.shape[0], self.graph_out_dim, self.g) # input = 6 * 6, output = 6 * 6, 36
+        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=8, num_rels=4, num_rules=3)# input = 6 * 6, output = 6 * 6, 36
 
         # self.features_dim = self.g.num_nodes() * self.graph_out_dim # this is the gnn output dimension
         self.features_dim = self.graph_out_dim # this is the gnn output dimension
@@ -286,10 +222,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         """
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, target, temp_info)
-        else:
-            features = self.gnn_process(obs, target, temp_info)
+        features = self.gnn_process(obs, target, temp_info)
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -386,21 +319,8 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
-    def batch_gnn_process(self, obss, targets, temp_info): # batch * dim, nodes * batch * dim | 6*113, 4*6*113
-        temp_info = th.transpose(temp_info, 0, 1) # batch, node_num, dim -> node_num, batch, dim
-        nodes_infos = th.cat((temp_info[:2], targets.unsqueeze(0), temp_info[2:], obss.unsqueeze(0)), dim=0).float() # nodes*batch*dim = 6*6*dim
-
-        graph_output = th.tanh(self.gnn(nodes_infos)) # nodes, batch, out_dim
-        graph_output = th.transpose(graph_output, 0, 1) # nodes, batch, out_dim --> batch, nodes, out_dim 6, 6, 32
-        # TODO, here can be changed, rather than simple flatten and concatenated
-        # features = th.flatten(graph_output, start_dim=1) # batch, flatten_out_dim = 6, 6, 32 -> 6, 192
-        features = th.mean(graph_output, dim=1) # batch, flatten_out_dim = 6, 6, 32 -> 6, 192
-        return features     
-
-    def gnn_process(self, obs, target, temp_info): # 113, 4*113
-
-        node_info = th.cat((temp_info[:2], target.unsqueeze(0), temp_info[2:], obs.unsqueeze(0)), dim=0).float() # 6, 113
-        graph_output = th.tanh(self.gnn(node_info)) # 6, 32, nodes * dim
-        # features = th.tanh(self.gnn(node_info)).flatten() 
-        features = th.mean(graph_output, dim=0)
+    def gnn_process(self, obs,): # 113, 4*113
+        node_infos = obs_to_feat(obs) # batch * node * dim = 6 * 9 * 6
+        g, edge_types, truth_values = graph_and_fuzzy(node_infos) # TODO, here should introduce truth_values normalization process
+        features = th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1) # batch * num_node * feat_size
         return features 
