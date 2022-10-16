@@ -69,9 +69,9 @@ class FuzzyRGCN(nn.Module):
 # model = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=8, num_rels=4, num_rules=3)
 # optimizer = th.optim.Adam(model.parameters(), lr=0.01)
 
-# out = th.transpose(model(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1) # batch * num_node * feat_size
-# print(out.shape)
-# mean = th.mean(out)
+# out = th.transpose(model(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1).mean(dim=1) # batch * num_node * feat_size
+# print(out.shape) # 7, 9, 8
+# mean = th.mean(out) 
 # target = th.zeros_like(mean)
 # loss = F.mse_loss(target, mean)
 

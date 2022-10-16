@@ -11,14 +11,14 @@ from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
 from stable_baselines3.common.vec_env import VecEnv
-from feng_algorithms.common.buffers import TempRolloutBuffer
-from feng_algorithms.common.policies import ActorCriticGnnPolicy
+from stable_baselines3.common.buffers import RolloutBuffer
+from feng_algorithms.common.policies_varient import ActorCriticGnnPolicy_variant2
 
 class OnPolicyAlgorithm(BaseAlgorithm):
 
     def __init__(
         self,
-        policy: Union[str, Type[ActorCriticGnnPolicy]],
+        policy: Union[str, Type[ActorCriticGnnPolicy_variant2]],
         env: Union[GymEnv, str],
         learning_rate: Union[float, Schedule],
         n_steps: int,
@@ -73,13 +73,12 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else TempRolloutBuffer
+        buffer_cls = DictRolloutBuffer if isinstance(self.observation_space, gym.spaces.Dict) else RolloutBuffer
 
         self.rollout_buffer = buffer_cls(
             buffer_size=self.n_steps,
             observation_space=self.observation_space,
             action_space=self.action_space,
-            node_num=4,
             device=self.device,
             gae_lambda=self.gae_lambda,
             gamma=self.gamma,
@@ -93,14 +92,13 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             **self.policy_kwargs  # pytype:disable=not-instantiable
         )
         self.policy = self.policy.to(self.device)
-        self.policy.g.to(self.device)
         self.policy.gnn.to(self.device)
 
     def collect_rollouts(
         self,
         env: VecEnv,
         callback: BaseCallback,
-        rollout_buffer: TempRolloutBuffer,
+        rollout_buffer: RolloutBuffer,
         n_rollout_steps: int,
     ) -> bool:
 
@@ -123,10 +121,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.policy.reset_noise(env.num_envs)
 
             with th.no_grad():
-                temp_1 = obs_as_tensor(self.t_1_robot, self.device)
-                temp_2 = obs_as_tensor(self.t_2_robot, self.device)
                 obs_tensor = obs_as_tensor(self._last_obs, self.device)
-                actions, values, log_probs = self.policy(obs_tensor, temp_1, temp_2)
+                actions, values, log_probs = self.policy(obs_tensor)
             actions = actions.cpu().numpy()
 
             # Rescale and perform action
@@ -151,9 +147,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 # Reshape in case of discrete action
                 actions = actions.reshape(-1, 1)
 
-            self.t_2_robot = self.t_1_robot
-            self.t_1_robot = new_obs[:, 0: self.robot_info_dim]
-
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
             for idx, done in enumerate(dones):
@@ -163,8 +156,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     and infos[idx].get("TimeLimit.truncated", False)
                 ):
                    # TODO, shouldn't zeros initial
-                    self.t_1_robot[idx] = np.zeros((1, self.robot_info_dim))
-                    self.t_2_robot[idx] = np.zeros((1, self.robot_info_dim))
                     terminal_obs = self.policy.obs_to_tensor(infos[idx]["terminal_observation"])[0].squeeze()
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs)
@@ -178,7 +169,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         with th.no_grad():
             # Compute value for the last timestep
-            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device), self.target_generator(new_obs))
+            values = self.policy.predict_values(obs_as_tensor(new_obs, self.device))
 
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 

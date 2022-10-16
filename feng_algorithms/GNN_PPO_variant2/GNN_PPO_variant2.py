@@ -114,9 +114,6 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
         self.target_kl = target_kl
         self.robot_info_dim = robot_info_dim
 
-        self.t_1_robot = np.zeros((self.n_envs, self.robot_info_dim))
-        self.t_2_robot = np.zeros((self.n_envs, self.robot_info_dim))
-
         if _init_setup_model:
             self._setup_model()
             
@@ -165,11 +162,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
                 if self.use_sde:
                     self.policy.reset_noise(self.batch_size)
 
-                values, log_prob, entropy = self.policy.evaluate_actions(
-                                                                        rollout_data.observations, 
-                                                                        rollout_data.target, 
-                                                                        rollout_data.temp_info,
-                                                                        actions)
+                values, log_prob, entropy = self.policy.evaluate_actions(rollout_data.observations, actions)
                 values = values.flatten()
                 # Normalize advantage
                 advantages = rollout_data.advantages

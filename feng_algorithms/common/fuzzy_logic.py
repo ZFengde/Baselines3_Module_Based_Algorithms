@@ -14,19 +14,19 @@ def FuzzyInferSys(x1=None, x2=None, rel=None):
 
     if rel == 0 or rel == 1:
         x1_range = np.arange(0, 11, 1)
-        x2_range = np.arange(0, 11, 1)
+        x2_range = np.arange(0, 181, 1)
 
-        x11 = fuzz.trimf(x1_range, [0, 0, 5])
-        x12 = fuzz.trimf(x1_range, [0, 5, 10])
-        x13 = fuzz.trimf(x1_range, [5, 10, 10])
+        x11 = fuzz.trimf(x1_range, [0, 0, 2.5])
+        x12 = fuzz.trimf(x1_range, [1, 2.5, 4])
+        x13 = fuzz.trimf(x1_range, [1.5, 4, 4])
 
-        x11_level = fuzz.interp_membership(x1_range, x11, x1)
+        x11_level = fuzz.interp_membership(x1_range, x11, x1) # TODO, device issue
         x12_level = fuzz.interp_membership(x1_range, x12, x1)
         x13_level = fuzz.interp_membership(x1_range, x13, x1)
 
-        x21 = fuzz.trimf(x2_range, [0, 0, 5])
-        x22 = fuzz.trimf(x2_range, [0, 5, 10])
-        x23 = fuzz.trimf(x2_range, [5, 10, 10])
+        x21 = fuzz.trimf(x2_range, [0, 0, 105])
+        x22 = fuzz.trimf(x2_range, [45, 90, 135])
+        x23 = fuzz.trimf(x2_range, [75, 180, 180])
 
         x21_level = fuzz.interp_membership(x2_range, x21, x2)
         x22_level = fuzz.interp_membership(x2_range, x22, x2)
@@ -54,7 +54,7 @@ def FuzzyInferSys(x1=None, x2=None, rel=None):
         truth_value = th.stack((th.tensor(x11_level), th.tensor(x12_level), th.tensor(x13_level)), dim=1)
         return truth_value.float()
 
-def graph_and_fuzzy(node_infos): # generate graph, etypes, and truth values based on given node infos
+def graph_and_fuzzy(node_infos, device): # generate graph, etypes, and truth values based on given node infos
     if node_infos.dim() == 2:
         node_infos = node_infos.unsqueeze(0)
 
@@ -101,7 +101,7 @@ def graph_and_fuzzy(node_infos): # generate graph, etypes, and truth values base
                 edge_types.append(3)
                 truth_values.append(nodes2tv(node_infos[:, i], node_infos[:, j], rel=3))
 
-    return dgl.graph((edge_src, edge_dst)), th.tensor(edge_types), th.stack(truth_values, dim=0)
+    return dgl.graph((edge_src, edge_dst)).to(device), th.tensor(edge_types).to(device), th.stack(truth_values, dim=0).to(device)
 
 def nodes2tv(node1, node2, rel): # provide truth values based on two given nodes info
     # node1 always refer to moving object or satatic object while node2 refer to static object
@@ -113,14 +113,14 @@ def nodes2tv(node1, node2, rel): # provide truth values based on two given nodes
         alpha = pot_target_or_obstacle - pos_robot
         beta = vel + ori
         # here need to think about batch process
-        x1 = np.linalg.norm((pos_robot - pot_target_or_obstacle), axis=1)
-        x2 = angle(alpha, beta)
+        x1 = th.linalg.norm((pos_robot - pot_target_or_obstacle), axis=1).cpu()
+        x2 = angle(alpha, beta).cpu()
         return FuzzyInferSys(x1=x1, x2=x2, rel=rel)
 
     elif rel == 2 or rel == 3:
         pos1 = node1[:, :2]
         pos2 = node2[:, :2]
-        x1 = np.linalg.norm((pos1 - pos2), axis=1) # distance 
+        x1 = th.linalg.norm((pos1 - pos2), axis=1).cpu() # distance 
         return FuzzyInferSys(x1=x1, rel=rel)
 
 def obs_to_feat(obs): # transfer observation into node features form
@@ -141,4 +141,4 @@ def obs_to_feat(obs): # transfer observation into node features form
 def angle(v1, v2): # calculate angle between two give vectors
     cos = th.nn.CosineSimilarity(dim=1, eps=1e-6)
     cos_value = cos(v1, v2)
-    return np.degrees(th.acos(cos_value))
+    return th.rad2deg(th.acos(cos_value))
