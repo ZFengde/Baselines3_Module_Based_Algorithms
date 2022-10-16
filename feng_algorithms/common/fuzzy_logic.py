@@ -5,7 +5,6 @@ import dgl
 import torch as th
 
 def FuzzyInferSys(x1=None, x2=None, rel=None):
-    # TODO, range should be modified
     # Relationship 0: robot and obstacles, altogether 3
     # x1, x2, big medium small
     # if x1 is big, x2 is big, then no need to worry, good, which means can igonre
@@ -13,14 +12,14 @@ def FuzzyInferSys(x1=None, x2=None, rel=None):
     # if x1 is small, x2 is small, then very dangerous, bad condition, which means short term planning to aviod the obstacle
 
     if rel == 0 or rel == 1:
-        x1_range = np.arange(0, 11, 1)
+        x1_range = np.arange(0, 4, 0.1)
         x2_range = np.arange(0, 181, 1)
 
         x11 = fuzz.trimf(x1_range, [0, 0, 2.5])
         x12 = fuzz.trimf(x1_range, [1, 2.5, 4])
         x13 = fuzz.trimf(x1_range, [1.5, 4, 4])
 
-        x11_level = fuzz.interp_membership(x1_range, x11, x1) # TODO, device issue
+        x11_level = fuzz.interp_membership(x1_range, x11, x1)
         x12_level = fuzz.interp_membership(x1_range, x12, x1)
         x13_level = fuzz.interp_membership(x1_range, x13, x1)
 
@@ -32,27 +31,28 @@ def FuzzyInferSys(x1=None, x2=None, rel=None):
         x22_level = fuzz.interp_membership(x2_range, x22, x2)
         x23_level = fuzz.interp_membership(x2_range, x23, x2)
 
+
         truth_value = th.stack((th.min(th.tensor(x11_level), th.tensor(x21_level)),
                                 th.min(th.tensor(x12_level), th.tensor(x22_level)),
                                 th.min(th.tensor(x13_level), th.tensor(x23_level))), dim=1)
                                 # here, dim=0 --> 72 * 3 * 6
                                 # here, dim=1 --> 72 * 6 * 3
 
-        return truth_value.float()
+        return th.nn.functional.normalize(truth_value).float()
 
     elif rel == 2 or rel == 3:
-        x1_range = np.arange(0, 11, 1)
+        x1_range = np.arange(0, 4, 0.1)
 
-        x11 = fuzz.trimf(x1_range, [0, 0, 5])
-        x12 = fuzz.trimf(x1_range, [0, 5, 10])
-        x13 = fuzz.trimf(x1_range, [5, 10, 10])
+        x11 = fuzz.trimf(x1_range, [0, 0, 2.5])
+        x12 = fuzz.trimf(x1_range, [1, 2.5, 4])
+        x13 = fuzz.trimf(x1_range, [1.5, 4, 4])
 
         x11_level = fuzz.interp_membership(x1_range, x11, x1)
         x12_level = fuzz.interp_membership(x1_range, x12, x1)
         x13_level = fuzz.interp_membership(x1_range, x13, x1)
 
         truth_value = th.stack((th.tensor(x11_level), th.tensor(x12_level), th.tensor(x13_level)), dim=1)
-        return truth_value.float()
+        return th.nn.functional.normalize(truth_value).float()
 
 def graph_and_fuzzy(node_infos, device): # generate graph, etypes, and truth values based on given node infos
     if node_infos.dim() == 2:

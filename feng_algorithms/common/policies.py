@@ -969,5 +969,5 @@ class ActorCriticGnnPolicy_variant1(BasePolicy):
         node_info = th.cat((temp_info[:2], target.unsqueeze(0), temp_info[2:], obs.unsqueeze(0)), dim=0).float() # 6, 113
         graph_output = th.tanh(self.gnn(node_info)) # 6, 32, nodes * dim
         # features = th.tanh(self.gnn(node_info)).flatten() 
-        features = th.mean(graph_output, dim=0)
+        features = th.mean(graph_output, dim=1)
         return features 

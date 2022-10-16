@@ -19,8 +19,7 @@ class RGCNLayer(nn.Module):
         self.h_bias = nn.Parameter(th.Tensor(out_feat))
 
         nn.init.xavier_uniform_(self.loop_weight, gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self.weight,
-                                gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self.weight, gain=nn.init.calculate_gain('relu'))
         nn.init.zeros_(self.h_bias)
 
     def message_func(self, edges):
@@ -58,13 +57,13 @@ class FuzzyRGCN(nn.Module):
         self.layer2 = RGCNLayer(self.h_dim, self.out_dim, self.num_rels, self.num_rules)
 
     def forward(self, g, feat, etypes, truth_value):
-        x =  th.tanh(self.layer1(g, feat, etypes, truth_value))
+        x =  th.relu(self.layer1(g, feat, etypes, truth_value))
         x = self.layer2(g, x, etypes, truth_value)
         return x
 
 # obs = th.rand((7, 22)) # batch * obs_dim
 # node_infos = obs_to_feat(obs) # batch * node * dim = 6 * 9 * 6
-# g, edge_types, truth_values = graph_and_fuzzy(node_infos) # TODO, here should introduce truth_values normalization process
+# g, edge_types, truth_values = graph_and_fuzzy(node_infos)
 
 # model = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=8, num_rels=4, num_rules=3)
 # optimizer = th.optim.Adam(model.parameters(), lr=0.01)

@@ -272,6 +272,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         features = self.gnn_process(obs)
         # features = self.extract_features(obs)
         latent_pi, latent_vf = self.mlp_extractor(features)
+        # latent_pi too small
         distribution = self._get_action_dist_from_latent(latent_pi)
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
@@ -305,6 +306,6 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
         node_infos = obs_to_feat(obs).to(self.device) # batch * node * dim = 6 * 9 * 6
-        g, edge_types, truth_values = graph_and_fuzzy(node_infos, device=self.device) # TODO, here should introduce truth_values normalization process
-        features = th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1).mean(dim=1) # batch * num_node * feat_size
+        g, edge_types, truth_values = graph_and_fuzzy(node_infos, device=self.device)
+        features = th.mean(th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1), dim=1) # batch * num_node * feat_size
         return features # batch * 8
