@@ -12,8 +12,8 @@ import gym
 import numpy as np
 import torch as th
 from torch import nn
-from RGCN import FuzzyRGCN
-from fuzzy_logic import obs_to_feat, graph_and_fuzzy
+from feng_algorithms.common.fuzzyrgcn import FuzzyRGCN
+from feng_algorithms.common.fuzzy_logic import obs_to_feat, graph_and_fuzzy
 
 from stable_baselines3.common.distributions import (
     BernoulliDistribution,
@@ -77,16 +77,15 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
             if features_extractor_class == NatureCNN:
                 net_arch = []
             else:
-                net_arch = [dict(pi=[128, 128], vf=[128, 128])]
+                net_arch = [dict(pi=[64, 64], vf=[64, 64])]
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
         self.ortho_init = ortho_init
-        self.graph_out_dim = 32
+        self.graph_out_dim = 8
         
         observation_space = self.observation_space
         self.features_extractor = features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
-        # self.features_dim = self.features_extractor.features_dim
 
         self.normalize_images = normalize_images
         self.log_std_init = log_std_init
@@ -109,16 +108,8 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
-        # 1 robot, 1 target, 7 obstacles, alltogether 9 nodes, i.e., ID: 0-8
-        src_ids = th.tensor([0, 0, 0, 1, 1, 2, 3, 3, 4]) # 6 nodes, then 6, 6, , i.e., nodes, batch, 
-        dst_ids = th.tensor([1, 2, 3, 2, 4, 5, 4, 5, 5])
-        device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
-        self.g = dgl.graph((src_ids, dst_ids)).to(device)
-        
-        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=8, num_rels=4, num_rules=3)# input = 6 * 6, output = 6 * 6, 36
-
-        # self.features_dim = self.g.num_nodes() * self.graph_out_dim # this is the gnn output dimension
-        self.features_dim = self.graph_out_dim # this is the gnn output dimension
+        # self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
+        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=3)# input = 6 * 6, output = 6 * 6, 36
 
         self._build(lr_schedule)
 
@@ -164,7 +155,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         #       net_arch here is an empty list and mlp_extractor does not
         #       really contain any layers (acts like an identity module).
         self.mlp_extractor = MlpExtractor(
-            self.features_dim,
+            self.graph_out_dim,
             net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
@@ -212,7 +203,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
 
-    def forward(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def forward(self, obs: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
 
@@ -222,7 +213,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         """
         # Preprocess the observation if needed
         # features = self.extract_features(obs)
-        features = self.gnn_process(obs, target, temp_info)
+        features = self.gnn_process(obs)
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
@@ -267,7 +258,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         """
         return self.get_distribution(observation).get_actions(deterministic=deterministic)
 
-    def evaluate_actions(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+    def evaluate_actions(self, obs: th.Tensor, actions: th.Tensor) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Evaluate actions according to the current policy,
         given the observations.
@@ -278,10 +269,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
             and entropy of the action distribution.
         """
         # Preprocess the observation if needed
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, target, temp_info)
-        else:
-            features = self.gnn_process(obs, target, temp_info)
+        features = self.gnn_process(obs)
         # features = self.extract_features(obs)
         latent_pi, latent_vf = self.mlp_extractor(features)
         distribution = self._get_action_dist_from_latent(latent_pi)
@@ -289,7 +277,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         values = self.value_net(latent_vf)
         return values, log_prob, distribution.entropy()
 
-    def get_distribution(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor) -> Distribution:
+    def get_distribution(self, obs: th.Tensor) -> Distribution:
         """
         Get the current policy distribution given the observations.
 
@@ -297,14 +285,11 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         :return: the action distribution.
         """
         # features = self.extract_features(obs)
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, target, temp_info)
-        else:
-            features = self.gnn_process(obs, target, temp_info)
+        features = self.gnn_process(obs)
         latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(latent_pi)
 
-    def predict_values(self, obs: th.Tensor, target: th.Tensor, temp_info: th.Tensor) -> th.Tensor:
+    def predict_values(self, obs: th.Tensor) -> th.Tensor:
         """
         Get the estimated values according to the current policy given the observations.
 
@@ -312,15 +297,14 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         :return: the estimated values.
         """
         # features = self.extract_features(obs)
-        if obs.dim() == 2:
-            features = self.batch_gnn_process(obs, target, temp_info)
-        else:
-            features = self.gnn_process(obs, target, temp_info)
+        features = self.gnn_process(obs)
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
     def gnn_process(self, obs,): # 113, 4*113
-        node_infos = obs_to_feat(obs) # batch * node * dim = 6 * 9 * 6
-        g, edge_types, truth_values = graph_and_fuzzy(node_infos) # TODO, here should introduce truth_values normalization process
-        features = th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1) # batch * num_node * feat_size
-        return features 
+        if obs.dim() == 1:
+            obs = obs.unsqueeze(0)
+        node_infos = obs_to_feat(obs).to(self.device) # batch * node * dim = 6 * 9 * 6
+        g, edge_types, truth_values = graph_and_fuzzy(node_infos, device=self.device) # TODO, here should introduce truth_values normalization process
+        features = th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1).mean(dim=1) # batch * num_node * feat_size
+        return features # batch * 8
