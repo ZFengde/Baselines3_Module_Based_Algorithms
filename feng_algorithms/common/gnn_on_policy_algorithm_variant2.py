@@ -160,8 +160,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs)
                     rewards[idx] += self.gamma * terminal_value
-                if done and infos[idx].get('Success') == 'Yes':
-                    ep_num_success += 1
+                # if done and infos[idx].get('Success') == 'Yes':
+                #     ep_num_success += 1
 
             rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs)
             self._last_obs = new_obs

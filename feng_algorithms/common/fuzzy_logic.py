@@ -1,6 +1,5 @@
 import numpy as np
 import skfuzzy as fuzz
-import math
 import dgl
 import torch as th
 
@@ -12,26 +11,26 @@ def FuzzyInferSys(x1=None, x2=None, rel=None):
     # if x1 is small, x2 is small, then very dangerous, bad condition, which means short term planning to aviod the obstacle
 
     if rel == 0 or rel == 1:
-        x1_range = np.arange(0, 4, 0.1)
+        x1_range = np.arange(0, 3.1, 0.1)
         x2_range = np.arange(0, 181, 1)
 
-        x11 = fuzz.trimf(x1_range, [0, 0, 2.5])
-        x12 = fuzz.trimf(x1_range, [1, 2.5, 4])
-        x13 = fuzz.trimf(x1_range, [1.5, 4, 4])
+        x11 = fuzz.gaussmf(x1_range, 0, 0.75)
+        x12 = fuzz.gaussmf(x1_range, 1.5, 0.75)
+        x13 = fuzz.gaussmf(x1_range, 3, 0.75)
 
         x11_level = fuzz.interp_membership(x1_range, x11, x1)
         x12_level = fuzz.interp_membership(x1_range, x12, x1)
         x13_level = fuzz.interp_membership(x1_range, x13, x1)
 
-        x21 = fuzz.trimf(x2_range, [0, 0, 105])
-        x22 = fuzz.trimf(x2_range, [45, 90, 135])
-        x23 = fuzz.trimf(x2_range, [75, 180, 180])
+        x21 = fuzz.gaussmf(x2_range, 0, 45)
+        x22 = fuzz.gaussmf(x2_range, 90, 45)
+        x23 = fuzz.gaussmf(x2_range, 180, 45)
 
         x21_level = fuzz.interp_membership(x2_range, x21, x2)
         x22_level = fuzz.interp_membership(x2_range, x22, x2)
         x23_level = fuzz.interp_membership(x2_range, x23, x2)
 
-
+        # when the x1 or x2 out of range, but zeros is not the case
         truth_value = th.stack((th.min(th.tensor(x11_level), th.tensor(x21_level)),
                                 th.min(th.tensor(x12_level), th.tensor(x22_level)),
                                 th.min(th.tensor(x13_level), th.tensor(x23_level))), dim=1)
@@ -41,11 +40,11 @@ def FuzzyInferSys(x1=None, x2=None, rel=None):
         return th.nn.functional.normalize(truth_value).float()
 
     elif rel == 2 or rel == 3:
-        x1_range = np.arange(0, 4, 0.1)
+        x1_range = np.arange(0, 3.1, 0.1)
 
-        x11 = fuzz.trimf(x1_range, [0, 0, 2.5])
-        x12 = fuzz.trimf(x1_range, [1, 2.5, 4])
-        x13 = fuzz.trimf(x1_range, [1.5, 4, 4])
+        x11 = fuzz.gaussmf(x1_range, 0, 0.75)
+        x12 = fuzz.gaussmf(x1_range, 1.5, 0.75)
+        x13 = fuzz.gaussmf(x1_range, 3, 0.75)
 
         x11_level = fuzz.interp_membership(x1_range, x11, x1)
         x12_level = fuzz.interp_membership(x1_range, x12, x1)
@@ -115,9 +114,11 @@ def nodes2tv(node1, node2, rel): # provide truth values based on two given nodes
         # here need to think about batch process
         x1 = th.linalg.norm((pos_robot - pot_target_or_obstacle), axis=1).cpu()
         x2 = angle(alpha, beta).cpu()
+        if x2.isnan().any():
+            print('Got you!!!')
         return FuzzyInferSys(x1=x1, x2=x2, rel=rel)
 
-    elif rel == 2 or rel == 3:
+    else:
         pos1 = node1[:, :2]
         pos2 = node2[:, :2]
         x1 = th.linalg.norm((pos1 - pos2), axis=1).cpu() # distance 
@@ -139,6 +140,10 @@ def obs_to_feat(obs): # transfer observation into node features form
         return node_infos
 
 def angle(v1, v2): # calculate angle between two give vectors
+    epsilon =1e-8
     cos = th.nn.CosineSimilarity(dim=1, eps=1e-6)
     cos_value = cos(v1, v2)
-    return th.rad2deg(th.acos(cos_value))
+    # This is for safe acos, reference to note
+    radian = th.acos(th.clamp(cos_value, -1 + epsilon, 1 - epsilon))
+    degree = th.rad2deg(radian)
+    return degree

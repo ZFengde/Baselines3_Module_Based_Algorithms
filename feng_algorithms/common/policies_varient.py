@@ -217,12 +217,12 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
         values = self.value_net(latent_vf)
-        distribution = self._get_action_dist_from_latent(latent_pi)
+        distribution = self._get_action_dist_from_latent(latent_pi, obs, features)
         actions = distribution.get_actions(deterministic=deterministic)
         log_prob = distribution.log_prob(actions)
         return actions, values, log_prob
 
-    def _get_action_dist_from_latent(self, latent_pi: th.Tensor) -> Distribution:
+    def _get_action_dist_from_latent(self, latent_pi: th.Tensor, obs, features) -> Distribution:
         """
         Retrieve action distribution given the latent codes.
 
@@ -270,10 +270,8 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         """
         # Preprocess the observation if needed
         features = self.gnn_process(obs)
-        # features = self.extract_features(obs)
         latent_pi, latent_vf = self.mlp_extractor(features)
-        # latent_pi too small
-        distribution = self._get_action_dist_from_latent(latent_pi)
+        distribution = self._get_action_dist_from_latent(latent_pi, obs, features)
         log_prob = distribution.log_prob(actions)
         values = self.value_net(latent_vf)
         return values, log_prob, distribution.entropy()
@@ -288,7 +286,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # features = self.extract_features(obs)
         features = self.gnn_process(obs)
         latent_pi = self.mlp_extractor.forward_actor(features)
-        return self._get_action_dist_from_latent(latent_pi)
+        return self._get_action_dist_from_latent(latent_pi, obs, features)
 
     def predict_values(self, obs: th.Tensor) -> th.Tensor:
         """
@@ -302,10 +300,10 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
 
-    def gnn_process(self, obs,): # 113, 4*113
+    def gnn_process(self, obs): # 113, 4*113
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
         node_infos = obs_to_feat(obs).to(self.device) # batch * node * dim = 6 * 9 * 6
         g, edge_types, truth_values = graph_and_fuzzy(node_infos, device=self.device)
         features = th.mean(th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1), dim=1) # batch * num_node * feat_size
-        return features # batch * 8
+        return features # batch * 
