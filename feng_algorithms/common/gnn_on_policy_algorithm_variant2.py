@@ -143,10 +143,6 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             self._update_info_buffer(infos)
             n_steps += 1
 
-            if isinstance(self.action_space, gym.spaces.Discrete):
-                # Reshape in case of discrete action
-                actions = actions.reshape(-1, 1)
-
             # Handle timeout by bootstraping with value function
             # see GitHub issue #633
             for idx, done in enumerate(dones):
@@ -160,8 +156,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     with th.no_grad():
                         terminal_value = self.policy.predict_values(terminal_obs)
                     rewards[idx] += self.gamma * terminal_value
-                # if done and infos[idx].get('Success') == 'Yes':
-                #     ep_num_success += 1
+                    if infos[idx].get('Success') == 'Yes':
+                        ep_num_success += 1
 
             rollout_buffer.add(self._last_obs, actions, rewards, self._last_episode_starts, values, log_probs)
             self._last_obs = new_obs

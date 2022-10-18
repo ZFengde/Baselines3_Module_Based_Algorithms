@@ -1,8 +1,6 @@
 import os
 import warnings
 from typing import Any, Dict, Optional, Type, Union
-from stable_baselines3.common.utils import obs_as_tensor
-import time
 import numpy as np
 import torch as th
 from gym import spaces
