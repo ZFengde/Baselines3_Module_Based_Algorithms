@@ -102,6 +102,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         n_rollout_steps: int,
     ) -> bool:
 
+        start=time.time()
+
         assert self._last_obs is not None, "No previous observation was provided"
         # Switch to eval mode (this affects batch norm / dropout)
         self.policy.set_training_mode(False)
@@ -170,7 +172,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
         rollout_buffer.compute_returns_and_advantage(last_values=values, dones=dones)
 
         callback.on_rollout_end()
-
+        end=time.time()
+        print('Rollout time: %s Seconds'%(end-start))
         return True
 
     def train(self) -> None:

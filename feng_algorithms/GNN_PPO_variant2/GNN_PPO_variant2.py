@@ -5,6 +5,7 @@ import numpy as np
 import torch as th
 from gym import spaces
 from torch.nn import functional as F
+import time
 
 from feng_algorithms.common.gnn_on_policy_algorithm_variant2 import OnPolicyAlgorithm
 from feng_algorithms.common.policies_varient import ActorCriticGnnPolicy_variant2
@@ -130,6 +131,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
         """
         Update policy using the currently gathered rollout buffer.
         """
+        start=time.time()
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
         # Update optimizer learning rate
@@ -243,6 +245,8 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
         self.logger.record("train/clip_range", clip_range)
         if self.clip_range_vf is not None:
             self.logger.record("train/clip_range_vf", clip_range_vf)
+        end=time.time()
+        print('Trainiing time: %s Seconds'%(end-start))
 
     def learn(
         self,

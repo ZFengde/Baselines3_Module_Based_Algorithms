@@ -4,6 +4,7 @@ import collections
 import warnings
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
+import time
 
 import dgl
 import dgl.function as fn
@@ -13,7 +14,7 @@ import numpy as np
 import torch as th
 from torch import nn
 from feng_algorithms.common.fuzzyrgcn import FuzzyRGCN
-from feng_algorithms.common.fuzzy_logic import obs_to_feat, graph_and_fuzzy
+from feng_algorithms.common.fuzzy_logic import obs_to_feat, graph_and_etype, nodes2ante, FuzzyInferSys
 
 from stable_baselines3.common.distributions import (
     BernoulliDistribution,
@@ -109,9 +110,11 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
-        # self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
+        device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
         self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=3)# input = 6 * 6, output = 6 * 6, 36
-
+        self.g, self.edge_types = graph_and_etype()
+        self.g = self.g.to(device)
+        self.edge_types = self.edge_types.to(device)
         self._build(lr_schedule)
 
     def _get_constructor_parameters(self) -> Dict[str, Any]:
@@ -203,7 +206,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
 
         # Setup optimizer with initial learning rate
         self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)
-
+        
     def forward(self, obs: th.Tensor, deterministic: bool = False) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
         """
         Forward pass in all the networks (actor and critic)
@@ -304,7 +307,14 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
     def gnn_process(self, obs): # 113, 4*113
         if obs.dim() == 1:
             obs = obs.unsqueeze(0)
-        node_infos = obs_to_feat(obs).to(self.device) # batch * node * dim = 6 * 9 * 6
-        g, edge_types, truth_values = graph_and_fuzzy(node_infos, device=self.device)
-        features = th.mean(th.transpose(self.gnn(g, th.transpose(node_infos, 0, 1).float(), edge_types, truth_values), 0, 1), dim=1) # batch * num_node * feat_size
+        
+        # a = time.time()
+        node_infos = obs_to_feat(obs).to(self.device) # batch * node * dim = 7 * 9 * 6
+        # TODO, still take lots of time
+        Ante_infos = nodes2ante(node_infos) # 2, 72, 4  72, 4, 3
+        truth_values = FuzzyInferSys(Ante_infos).to(self.device) # batch, edges_num, 3 = 72, 7, 3
+        features = th.mean(th.transpose(self.gnn(self.g, th.transpose(node_infos, 0, 1).float(), self.edge_types, truth_values), 0, 1), dim=1) # batch * num_node * feat_size
+        # e = time.time()
+        # print('d time: %s Seconds'%(e-a))
+        
         return features # batch * 

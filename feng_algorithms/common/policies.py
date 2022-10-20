@@ -6,6 +6,7 @@ import warnings
 from abc import ABC, abstractmethod
 from functools import partial
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
+import time
 
 import dgl
 import dgl.function as fn

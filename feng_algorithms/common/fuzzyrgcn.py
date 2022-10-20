@@ -33,9 +33,9 @@ class RGCNLayer(nn.Module):
     def forward(self, g, feat, etypes, truth_value):
         with g.local_scope():
             # pass node features and etypes information
-            g.srcdata['h'] = feat # 9, batch, input_dim
+            g.srcdata['h'] = feat # 9, batch, input_dim 
             g.edata['rel_type'] = etypes # assigned every 
-            g.edata['truth_value'] = truth_value # 72 * 6 * 3
+            g.edata['truth_value'] = truth_value # 72, batch, 3
 
             # message passing
             g.update_all(self.message_func, fn.sum('msg', 'h'))
