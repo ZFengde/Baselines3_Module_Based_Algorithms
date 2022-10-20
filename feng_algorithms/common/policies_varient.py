@@ -311,7 +311,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # a = time.time()
         node_infos = obs_to_feat(obs).to(self.device) # batch * node * dim = 7 * 9 * 6
         # TODO, still take lots of time
-        Ante_infos = nodes2ante(node_infos) # 2, 72, 4  72, 4, 3
+        Ante_infos = nodes2ante(node_infos) # batch, node_num, dim --> batch, edge_num, ante_num
         truth_values = FuzzyInferSys(Ante_infos).to(self.device) # batch, edges_num, 3 = 72, 7, 3
         features = th.mean(th.transpose(self.gnn(self.g, th.transpose(node_infos, 0, 1).float(), self.edge_types, truth_values), 0, 1), dim=1) # batch * num_node * feat_size
         # e = time.time()

@@ -35,9 +35,9 @@ def FuzzyInferSys(Ante_infos):
     x23_level = fuzz.interp_membership(x2_range, x23, x2)
 
     # when the x1 or x2 out of range, but zeros is not the case
-    truth_value = th.stack((th.min(th.tensor(x11_level), th.tensor(x21_level)),
-                            th.min(th.tensor(x12_level), th.tensor(x22_level)),
-                            th.min(th.tensor(x13_level), th.tensor(x23_level))), dim=2)
+    truth_value = th.stack((th.max(th.tensor(x11_level), th.tensor(x21_level)),
+                            th.max(th.tensor(x12_level), th.tensor(x22_level)),
+                            th.max(th.tensor(x13_level), th.tensor(x23_level))), dim=2)
                             # here, dim=0 --> 72 * 3 * 6
                             # here, dim=1 --> 72 * 6 * 3
 
@@ -116,8 +116,8 @@ def nodes2ante(node_infos): # provide truth values based on two given nodes info
     # node1 always refer to moving object or satatic object while node2 refer to static object
     Ante = []
 
-    for i in range(len(node_infos[1])):
-        for j in range(len(node_infos[1])):
+    for i in range(node_infos.shape[1]):
+        for j in range(node_infos.shape[1]):
             if i == j:
                 continue
 
@@ -148,19 +148,13 @@ def Ante_generator(node1, node2, angle_include=False):
     pos_robot = node1[:, :2]
     ori = node1[:, 2: 4]
     vel = node1[:, 4: 6]
-    pot_target_or_obstacle = node2[:, :2]
-    alpha = pot_target_or_obstacle - pos_robot
+    pos_target_or_obstacle = node2[:, :2]
+    alpha = pos_target_or_obstacle - pos_robot
     beta = vel + ori
     # here need to think about batch process
-    x1 = th.linalg.norm((pos_robot - pot_target_or_obstacle), axis=1)
+    x1 = th.linalg.norm((pos_robot - pos_target_or_obstacle), axis=1)
     x2 = angle(alpha, beta)
     return x1, x2
-
-    # else:
-    #     pos1 = node1[:, :2]
-    #     pos2 = node2[:, :2]
-    #     x1 = th.linalg.norm((pos1 - pos2), axis=1).cpu() # distance 
-    #     return x1, None
 
 def angle(v1, v2): # calculate angle between two give vectors
     epsilon =1e-8
@@ -171,3 +165,15 @@ def angle(v1, v2): # calculate angle between two give vectors
     degree = th.rad2deg(radian)
     return degree
 
+# v1 = th.rand(1, 2)
+# v2 = th.zeros(1, 2)
+# output = angle(v1, v2)
+# print(output)
+# obs = th.ones(22)
+# if obs.dim() == 1:
+#     obs = obs.unsqueeze(0)
+
+# node_infos = obs_to_feat(obs)
+# Ante_infos = nodes2ante(node_infos) # 7, 72, 2
+# truth_values = FuzzyInferSys(Ante_infos)
+# print(truth_values.shape)

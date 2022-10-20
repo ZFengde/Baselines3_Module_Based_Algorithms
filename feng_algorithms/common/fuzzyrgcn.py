@@ -3,7 +3,18 @@ import torch.nn as nn
 import dgl
 import dgl.function as fn
 
-# why this part can cause nan
+class AnteLayer(nn.Module):
+    def __init__(self):
+        super(AnteLayer, self).__init__()
+
+        pass
+
+    def message_func(self, edges):
+        pass
+
+    def forward(self, g, feat, etypes, truth_value):
+        pass
+
 class RGCNLayer(nn.Module):
     def __init__(self, in_feat, out_feat, num_rels, num_rules):
         super(RGCNLayer, self).__init__()

@@ -32,7 +32,6 @@ def test():
 	model.load(f'./GNN_PPO_variant2/{env_id}/models/1663674299/3100000')
 	model.test(100)
 
-
 if __name__ == '__main__':
 	learn()
 
