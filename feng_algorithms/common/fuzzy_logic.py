@@ -4,17 +4,11 @@ import dgl
 import torch as th
 import time
 
-# def FuzzyInferSys(x1=None, x2=None, rel=None):
-def FuzzyInferSys(Ante_infos):
-    # Relationship 0: robot and obstacles, altogether 3
-    # x1, x2, big medium small
-    # if x1 is big, x2 is big, then no need to worry, good, which means can igonre
-    # if x1 is medium, x2 is medium, need to worry moderately, medium, which means long term planning
-    # if x1 is small, x2 is small, then very dangerous, bad condition, which means short term planning to aviod the obstacle
+def FuzzyInferSys(x1, x2):
 
-    # if rel == 0 or rel == 1:
-    x1 = Ante_infos[:, :, 0].cpu()
-    x2 = Ante_infos[:, :, 1].cpu()
+    x1 = x1.cpu()
+    x2 = x2.cpu()
+    
     x1_range = np.arange(0, 3.1, 0.1)
     x2_range = np.arange(0, 181, 1)
 
@@ -43,25 +37,10 @@ def FuzzyInferSys(Ante_infos):
 
     return th.nn.functional.normalize(truth_value).float()
 
-    # elif rel == 2 or rel == 3:
-    #     x1_range = np.arange(0, 3.1, 0.1)
-
-    #     x11 = fuzz.gaussmf(x1_range, 0, 0.75)
-    #     x12 = fuzz.gaussmf(x1_range, 1.5, 0.75)
-    #     x13 = fuzz.gaussmf(x1_range, 3, 0.75)
-
-    #     x11_level = fuzz.interp_membership(x1_range, x11, x1)
-    #     x12_level = fuzz.interp_membership(x1_range, x12, x1)
-    #     x13_level = fuzz.interp_membership(x1_range, x13, x1)
-
-    #     truth_value = th.stack((th.tensor(x11_level), th.tensor(x12_level), th.tensor(x13_level)), dim=1)
-    #     return th.nn.functional.normalize(truth_value).float()
-
-def graph_and_etype(): # generate graph, etypes
+def graph_and_etype(node_num): # generate graph, etypes
     edge_src = []
     edge_dst = []
     edge_types = []
-    node_num = 9
     for i in range(node_num):
         for j in range(node_num):
 
@@ -143,27 +122,28 @@ def nodes2ante(node_infos): # provide truth values based on two given nodes info
 
     return th.stack(Ante, dim=0)
 
-def Ante_generator(node1, node2, angle_include=False):
-    # if angle_include:
-    pos_robot = node1[:, :2]
-    ori = node1[:, 2: 4]
-    vel = node1[:, 4: 6]
-    pos_target_or_obstacle = node2[:, :2]
-    alpha = pos_target_or_obstacle - pos_robot
-    beta = vel + ori
-    # here need to think about batch process
-    x1 = th.linalg.norm((pos_robot - pos_target_or_obstacle), axis=1)
-    x2 = angle(alpha, beta)
-    return x1, x2
-
 def angle(v1, v2): # calculate angle between two give vectors
+    # 72, 7, 2, 72, 7, 2
     epsilon =1e-8
-    cos = th.nn.CosineSimilarity(dim=1, eps=1e-6)
+    cos = th.nn.CosineSimilarity(dim=2, eps=1e-6)
     cos_value = cos(v1, v2)
     # This is for safe acos, reference to note
     radian = th.acos(th.clamp(cos_value, -1 + epsilon, 1 - epsilon))
     degree = th.rad2deg(radian)
     return degree
+
+def Ante_generator(node1, node2):
+    # 72, 7, 6
+    pos_robot = node1[:, :, :2] # 72, 7
+    ori = node1[:, :, 2: 4]
+    vel = node1[:, :, 4: 6]
+    pos_target_or_obstacle = node2[:, :, :2]
+    alpha = pos_target_or_obstacle - pos_robot
+    beta = vel + ori
+    # here need to think about batch process
+    x1 = th.linalg.norm((pos_robot - pos_target_or_obstacle), axis=2)
+    x2 = angle(alpha, beta)
+    return x1, x2
 
 # v1 = th.rand(1, 2)
 # v2 = th.zeros(1, 2)

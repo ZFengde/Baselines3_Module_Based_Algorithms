@@ -2,18 +2,28 @@ import torch as th
 import torch.nn as nn
 import dgl
 import dgl.function as fn
+from .fuzzy_logic import graph_and_etype, FuzzyInferSys, Ante_generator
 
 class AnteLayer(nn.Module):
     def __init__(self):
         super(AnteLayer, self).__init__()
+        self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
 
-        pass
+    def edge_func(self, edges):
+        nodes1 = edges.src['h'] # 9, 7, 6
+        nodes2 = edges.dst['h']
 
-    def message_func(self, edges):
-        pass
+        x1, x2 = Ante_generator(nodes1, nodes2)  # 72, 2, 72, 2
+        ante = FuzzyInferSys(x1, x2).to(self.device)
 
-    def forward(self, g, feat, etypes, truth_value):
-        pass
+        return {'ante': ante}
+
+    def forward(self, g, feat, etypes):
+        g.srcdata['h'] = feat # 9, batch, input_dim 
+        g.edata['rel_type'] = etypes # assigned every 
+        g.apply_edges(self.edge_func)
+        
+        return g.edata['ante'] # 72, 6
 
 class RGCNLayer(nn.Module):
     def __init__(self, in_feat, out_feat, num_rels, num_rules):
@@ -64,10 +74,17 @@ class FuzzyRGCN(nn.Module):
         self.num_rels = num_rels
         self.num_rules = num_rules
 
+        self.ante_layer = AnteLayer()
         self.layer1 = RGCNLayer(self.input_dim, self.h_dim, self.num_rels, self.num_rules)
         self.layer2 = RGCNLayer(self.h_dim, self.out_dim, self.num_rels, self.num_rules)
 
-    def forward(self, g, feat, etypes, truth_value):
-        x =  th.tanh(self.layer1(g, feat, etypes, truth_value))
+    def forward(self, g, feat, etypes):
+        truth_value = self.ante_layer(g, feat, etypes)
+        x = th.tanh(self.layer1(g, feat, etypes, truth_value))
         x = self.layer2(g, x, etypes, truth_value)
         return x
+
+# node_infos = th.rand(9, 7, 6)
+# g, edge_types = graph_and_etype(node_num=9)
+# model = AnteLayer()
+# print(model(g, node_infos, edge_types).shape)
