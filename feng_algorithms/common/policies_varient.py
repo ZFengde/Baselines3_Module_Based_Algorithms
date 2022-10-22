@@ -112,7 +112,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
 
         self.ante = AnteLayer()
         device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
-        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=3)# input = 6 * 6, output = 6 * 6, 36
+        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9)# input = 6 * 6, output = 6 * 6, 36
         self.g, self.edge_types = graph_and_etype(node_num=9)
         self.g = self.g.to(device)
         self.edge_types = self.edge_types.to(device)

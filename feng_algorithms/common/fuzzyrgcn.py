@@ -2,7 +2,7 @@ import torch as th
 import torch.nn as nn
 import dgl
 import dgl.function as fn
-from .fuzzy_logic import graph_and_etype, FuzzyInferSys, Ante_generator
+from feng_algorithms.common.fuzzy_logic import graph_and_etype, FuzzyInferSys, Ante_generator
 
 class AnteLayer(nn.Module):
     def __init__(self):
@@ -10,10 +10,9 @@ class AnteLayer(nn.Module):
         self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
 
     def edge_func(self, edges):
-        nodes1 = edges.src['h'] # 9, 7, 6
-        nodes2 = edges.dst['h']
-
-        x1, x2 = Ante_generator(nodes1, nodes2)  # 72, 2, 72, 2
+        vector = edges.dst['h'] - edges.src['h']
+        x1, x2 = Ante_generator(vector)  # 72, 2, 72, 2
+        # here is very important
         ante = FuzzyInferSys(x1, x2).to(self.device)
 
         return {'ante': ante}
@@ -25,9 +24,9 @@ class AnteLayer(nn.Module):
         
         return g.edata['ante'] # 72, 6
 
-class RGCNLayer(nn.Module):
+class FuzzyRGCNLayer(nn.Module):
     def __init__(self, in_feat, out_feat, num_rels, num_rules):
-        super(RGCNLayer, self).__init__()
+        super(FuzzyRGCNLayer, self).__init__()
         self.in_feat = in_feat
         self.out_feat = out_feat
         self.num_rels = num_rels
@@ -43,12 +42,10 @@ class RGCNLayer(nn.Module):
         nn.init.zeros_(self.h_bias)
 
     def message_func(self, edges):
-        # TODO, here could be the place where nan generated
-        # selecting corresponding w based on rel_type
         w = self.weight[edges.data['rel_type']] # 72, 3, in * out
         truth_values = edges.data['truth_value'] # 72, 7, 3
-        w = th.bmm(truth_values, w.view(72, 3, -1)).view(-1, self.in_feat, self.out_feat) # --> 72, 7, in * out = 60
-        msg =  th.bmm(edges.src['h'].unsqueeze(1).view(-1, 1, self.in_feat), w).view(72, truth_values.shape[1], self.out_feat) # 72 * 7 * out
+        w = th.bmm(truth_values, w.view(edges.batch_size(), self.num_rules, -1)).view(-1, self.in_feat, self.out_feat) # --> 72, 7, in * out = 60
+        msg =  th.bmm(edges.src['h'].unsqueeze(1).view(-1, 1, self.in_feat), w).view(edges.batch_size(), truth_values.shape[1], self.out_feat) # 72 * 7 * out
         return {'msg': msg}
 
     def forward(self, g, feat, etypes, truth_value):
@@ -75,8 +72,8 @@ class FuzzyRGCN(nn.Module):
         self.num_rules = num_rules
 
         self.ante_layer = AnteLayer()
-        self.layer1 = RGCNLayer(self.input_dim, self.h_dim, self.num_rels, self.num_rules)
-        self.layer2 = RGCNLayer(self.h_dim, self.out_dim, self.num_rels, self.num_rules)
+        self.layer1 = FuzzyRGCNLayer(self.input_dim, self.h_dim, self.num_rels, self.num_rules)
+        self.layer2 = FuzzyRGCNLayer(self.h_dim, self.out_dim, self.num_rels, self.num_rules)
 
     def forward(self, g, feat, etypes):
         truth_value = self.ante_layer(g, feat, etypes)

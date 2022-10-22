@@ -29,9 +29,16 @@ def FuzzyInferSys(x1, x2):
     x23_level = fuzz.interp_membership(x2_range, x23, x2)
 
     # when the x1 or x2 out of range, but zeros is not the case
-    truth_value = th.stack((th.max(th.tensor(x11_level), th.tensor(x21_level)),
-                            th.max(th.tensor(x12_level), th.tensor(x22_level)),
-                            th.max(th.tensor(x13_level), th.tensor(x23_level))), dim=2)
+    truth_value = th.stack((th.tensor(x11_level) *th.tensor(x21_level),
+                            th.tensor(x11_level) * th.tensor(x22_level),
+                            th.tensor(x11_level) * th.tensor(x23_level),
+                            th.tensor(x12_level) * th.tensor(x21_level),
+                            th.tensor(x12_level) * th.tensor(x22_level),
+                            th.tensor(x12_level) * th.tensor(x23_level),
+                            th.tensor(x13_level) * th.tensor(x21_level),
+                            th.tensor(x13_level) * th.tensor(x22_level),
+                            th.tensor(x13_level) * th.tensor(x23_level)), dim=2)
+
                             # here, dim=0 --> 72 * 3 * 6
                             # here, dim=1 --> 72 * 6 * 3
 
@@ -132,23 +139,23 @@ def angle(v1, v2): # calculate angle between two give vectors
     degree = th.rad2deg(radian)
     return degree
 
-def Ante_generator(node1, node2):
-    # 72, 7, 6
-    pos_robot = node1[:, :, :2] # 72, 7
-    ori = node1[:, :, 2: 4]
-    vel = node1[:, :, 4: 6]
-    pos_target_or_obstacle = node2[:, :, :2]
-    alpha = pos_target_or_obstacle - pos_robot
-    beta = vel + ori
-    # here need to think about batch process
-    x1 = th.linalg.norm((pos_robot - pos_target_or_obstacle), axis=2)
-    x2 = angle(alpha, beta)
+def Ante_generator(vector):
+
+    alpha = vector[:, :, :2]
+    beta = vector[:, :, 2: 4] + vector[:, :, 4: 6]
+    x1 = th.linalg.norm((alpha), axis=2)
+    x2 = angle(-alpha, beta)
     return x1, x2
 
-# v1 = th.rand(1, 2)
-# v2 = th.zeros(1, 2)
-# output = angle(v1, v2)
+# v1 = th.rand(1, 1, 6)
+# v2 = th.ones(1, 1, 6)
+
+# output = Ante_generator(v1 - v2)
 # print(output)
+
+# output = Ante_generator(v2 - v1)
+# print(output)
+
 # obs = th.ones(22)
 # if obs.dim() == 1:
 #     obs = obs.unsqueeze(0)

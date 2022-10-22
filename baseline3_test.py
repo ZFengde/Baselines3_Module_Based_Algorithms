@@ -10,7 +10,7 @@ from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
 def learn():
-	env_id = 'Ant-v3'
+	env_id = 'Turtlebot-v4'
 	models_dir = f"Baselines3_PPO/{env_id}/models/{int(time.time())}/"
 	logdir = f"Baselines3_PPO/{env_id}/logs/{int(time.time())}/"
 
@@ -19,17 +19,13 @@ def learn():
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 
-	num_cpu = 6
-	env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv, env_kwargs={'exclude_current_positions_from_observation': False})
-	# env = gym.make('Ant-v3')
-	# n_actions = env.action_space.shape[-1]
-	# action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))
+	num_cpu = 4
+	# env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv, env_kwargs={'exclude_current_positions_from_observation': False})
+	env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv,)
 
 	model = PPO('MlpPolicy', env, verbose=1, tensorboard_log=logdir, use_sde=False)
-	# model = TD3("MlpPolicy", env, action_noise=action_noise, verbose=1)
 	TIMESTEPS = 10000
 	iters = 0
-	# for i in range(407):
 	for i in range(1000):
 		iters += 1
 		model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=f"Baselines3_PPO")
