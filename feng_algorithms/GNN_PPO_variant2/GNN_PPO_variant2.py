@@ -11,8 +11,7 @@ from feng_algorithms.common.gnn_on_policy_algorithm_variant2 import OnPolicyAlgo
 from feng_algorithms.common.policies_varient import ActorCriticGnnPolicy_variant2
 from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
-from stable_baselines3.common.utils import explained_variance, get_schedule_fn
-
+from stable_baselines3.common.utils import explained_variance, get_schedule_fn, obs_as_tensor
 
 class GNN_PPO_variant2(OnPolicyAlgorithm):
 
@@ -278,3 +277,27 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
 
     def load(self, path):
         self.policy.load_state_dict(th.load(path))
+
+    def test(self, test_episode):
+        self.rollout_buffer.reset()
+        obs = self.env.reset()
+        for episode_num in range(test_episode):
+            ep_reward = 0
+            ep_len = 0
+            
+            while True:
+                with th.no_grad():
+                    obs_tensor = obs_as_tensor(obs, self.device).squeeze()
+                    action, _, _ = self.policy(obs_tensor, deterministic=True)
+                action = action.unsqueeze(dim=0).cpu().numpy()
+
+                clipped_action = np.clip(action, self.env.action_space.low, self.env.action_space.high)
+                print(clipped_action)
+                obs, reward, done, _ = self.env.step(clipped_action)
+
+                ep_reward += reward
+                ep_len += 1
+                if done:
+                    print(ep_len, ep_reward)
+                    break
+        return True

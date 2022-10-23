@@ -6,8 +6,9 @@ import time
 
 def FuzzyInferSys(x1, x2):
 
-    x1 = x1.cpu()
-    x2 = x2.cpu()
+
+    x1 = th.clip(x1, 0, 3).cpu()
+    x2 = th.clip(x2, 0, 180).cpu()
     
     x1_range = np.arange(0, 3.1, 0.1)
     x2_range = np.arange(0, 181, 1)
@@ -29,7 +30,7 @@ def FuzzyInferSys(x1, x2):
     x23_level = fuzz.interp_membership(x2_range, x23, x2)
 
     # when the x1 or x2 out of range, but zeros is not the case
-    truth_value = th.stack((th.tensor(x11_level) *th.tensor(x21_level),
+    truth_value = th.stack((th.tensor(x11_level) * th.tensor(x21_level),
                             th.tensor(x11_level) * th.tensor(x22_level),
                             th.tensor(x11_level) * th.tensor(x23_level),
                             th.tensor(x12_level) * th.tensor(x21_level),
@@ -37,13 +38,13 @@ def FuzzyInferSys(x1, x2):
                             th.tensor(x12_level) * th.tensor(x23_level),
                             th.tensor(x13_level) * th.tensor(x21_level),
                             th.tensor(x13_level) * th.tensor(x22_level),
-                            th.tensor(x13_level) * th.tensor(x23_level)), dim=2)
+                            th.tensor(x13_level) * th.tensor(x23_level)), dim=2) # 72, 1, 9
 
                             # here, dim=0 --> 72 * 3 * 6
                             # here, dim=1 --> 72 * 6 * 3
-
-    return th.nn.functional.normalize(truth_value).float()
-
+    # return th.nn.functional.normalize((truth_value), dim=2).float()
+    return truth_value.float()
+    
 def graph_and_etype(node_num): # generate graph, etypes
     edge_src = []
     edge_dst = []
@@ -65,11 +66,7 @@ def graph_and_etype(node_num): # generate graph, etypes
                 edge_types.append(0)
 
             # robot-obstacle
-            elif (i==0 and 2<=j<=8):
-                edge_types.append(1)
-
-            # obstacle-robot
-            elif (2<=i<=8 and j==0):
+            elif (i==0 and 2<=j<=8) or (2<=i<=8 and j==0):
                 edge_types.append(1)
 
             # target-obstacle

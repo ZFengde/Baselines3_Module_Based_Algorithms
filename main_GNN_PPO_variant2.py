@@ -26,10 +26,10 @@ def learn():
 		model.save(models_dir, TIMESTEPS*iters)
 
 def test():
-	env_id = 'Ant-v3'
-	env = gym.make(env_id, exclude_current_positions_from_observation=False)
+	env_id = 'Turtlebot-v4'
+	env = make_vec_env(env_id, n_envs=1, vec_env_cls=SubprocVecEnv,)
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO_variant2/{env_id}/models/1663674299/3100000')
+	model.load(f'./GNN_PPO_variant2/{env_id}/models/1666534211/2460000')
 	model.test(100)
 
 if __name__ == '__main__':
