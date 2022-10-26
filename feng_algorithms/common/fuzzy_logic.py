@@ -5,7 +5,12 @@ import torch as th
 import time
 
 def FuzzyInferSys(x1, x2):
-
+    
+    '''
+    relationships: 
+    0: robot-target, 1: robot-obstacle
+    2: target-obstacle, 3:obstacle-obstacle
+    '''
 
     x1 = th.clip(x1, 0, 3).cpu()
     x2 = th.clip(x2, 0, 180).cpu()
@@ -29,10 +34,10 @@ def FuzzyInferSys(x1, x2):
     x22_level = fuzz.interp_membership(x2_range, x22, x2)
     x23_level = fuzz.interp_membership(x2_range, x23, x2)
 
-    # when the x1 or x2 out of range, but zeros is not the case
-    truth_value = th.stack((th.tensor(x11_level) * th.tensor(x21_level),
-                            th.tensor(x11_level) * th.tensor(x22_level),
-                            th.tensor(x11_level) * th.tensor(x23_level),
+    # edge_num, batch, rules_num
+    truth_value = th.stack((th.tensor(x11_level) * th.tensor(x21_level), # = 0.135 * x11_level
+                            th.tensor(x11_level) * th.tensor(x22_level), # = x11_level
+                            th.tensor(x11_level) * th.tensor(x23_level), # = 0.135 * x11_level
                             th.tensor(x12_level) * th.tensor(x21_level),
                             th.tensor(x12_level) * th.tensor(x22_level),
                             th.tensor(x12_level) * th.tensor(x23_level),
@@ -40,8 +45,6 @@ def FuzzyInferSys(x1, x2):
                             th.tensor(x13_level) * th.tensor(x22_level),
                             th.tensor(x13_level) * th.tensor(x23_level)), dim=2) # 72, 1, 9
 
-                            # here, dim=0 --> 72 * 3 * 6
-                            # here, dim=1 --> 72 * 6 * 3
     # return th.nn.functional.normalize((truth_value), dim=2).float()
     return truth_value.float()
     
@@ -66,11 +69,11 @@ def graph_and_etype(node_num): # generate graph, etypes
                 edge_types.append(0)
 
             # robot-obstacle
-            elif (i==0 and 2<=j<=8) or (2<=i<=8 and j==0):
+            elif (i==0 and 2<=j) or (2<=i and j==0):
                 edge_types.append(1)
 
             # target-obstacle
-            elif (i==1 and 2<=j<=8) or (2<=i<=8 and j==1):
+            elif (i==1 and 2<=j) or (2<=i and j==1):
                 edge_types.append(2)
 
             # obstacle-obstacle
@@ -144,20 +147,7 @@ def Ante_generator(vector):
     x2 = angle(-alpha, beta)
     return x1, x2
 
-# v1 = th.rand(1, 1, 6)
-# v2 = th.ones(1, 1, 6)
-
-# output = Ante_generator(v1 - v2)
-# print(output)
-
-# output = Ante_generator(v2 - v1)
-# print(output)
-
-# obs = th.ones(22)
-# if obs.dim() == 1:
-#     obs = obs.unsqueeze(0)
-
-# node_infos = obs_to_feat(obs)
-# Ante_infos = nodes2ante(node_infos) # 7, 72, 2
-# truth_values = FuzzyInferSys(Ante_infos)
-# print(truth_values.shape)
+# x1 = th.rand(1, 1, 3)
+# x2 = th.tensor([[[90, 90, 90]]])
+# truth_values = FuzzyInferSys(x1, x2)
+# print(truth_values)

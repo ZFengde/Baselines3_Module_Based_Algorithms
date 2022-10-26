@@ -14,7 +14,7 @@ import numpy as np
 import torch as th
 from torch import nn
 from feng_algorithms.common.fuzzyrgcn import FuzzyRGCN, AnteLayer
-from feng_algorithms.common.fuzzy_logic import obs_to_feat, graph_and_etype, nodes2ante, FuzzyInferSys
+from feng_algorithms.common.fuzzy_logic import obs_to_feat, graph_and_etype
 
 from stable_baselines3.common.distributions import (
     BernoulliDistribution,

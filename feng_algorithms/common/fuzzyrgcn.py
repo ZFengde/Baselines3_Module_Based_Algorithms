@@ -12,11 +12,17 @@ class AnteLayer(nn.Module):
         self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
 
     def edge_func(self, edges):
+        # TODO, for robot-target, we use channels method
+        # but for the remains, 
+        # we use the consequent weight to messure how a obstacle could affect the control
+        # This can be done by introduce Mamdani fuzzy
         vector = edges.dst['h'] - edges.src['h'] 
+        etypes = edges.data['rel_type'] # edge_num, batch, 1
         x1, x2 = Ante_generator(vector)  # edge_num, batch, 2
         # g.edata['rel_type']: edge_num, batch, 1, TODO, if so, could consider musk here
         # TODO, here need to see if we can change to rel based fuzzy system
-        ante = FuzzyInferSys(x1, x2).to(self.device) # 72, 1, 9
+        ante = FuzzyInferSys(x1, x2).to(self.device) # edge_num, batch, rules_num
+        watch = th.tensor(ante).squeeze()
 
         return {'ante': ante}
 
@@ -45,6 +51,7 @@ class FuzzyRGCNLayer(nn.Module):
         nn.init.zeros_(self.h_bias)
 
     def message_func(self, edges):
+        # TODO, here should take subgraph to do the control between robot and target
         w = self.weight[edges.data['rel_type']] # 72, 3, in * out
         h_bias = self.h_bias[edges.data['rel_type']] # 72, 3, out
         truth_values = edges.data['truth_value'] # 72, 7, 3
@@ -53,6 +60,7 @@ class FuzzyRGCNLayer(nn.Module):
         w = th.bmm(truth_values, w.view(edges.batch_size(), self.num_rules, -1)).view(-1, self.in_feat, self.out_feat) # --> 72, 7, in * out = 60
 
         bias = th.bmm(truth_values, h_bias)
+        # TODO, here msg'd better involved both src and dst info
         msg =  th.bmm(edges.src['h'].unsqueeze(1).view(-1, 1, self.in_feat), w).view(edges.batch_size(), truth_values.shape[1], self.out_feat) # 72 * 7 * out
 
         return {'msg': msg + bias}
