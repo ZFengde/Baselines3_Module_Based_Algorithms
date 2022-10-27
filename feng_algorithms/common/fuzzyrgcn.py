@@ -12,8 +12,8 @@ import skfuzzy as fuzz
 class AnteLayer(nn.Module):
     def __init__(self):
         super(AnteLayer, self).__init__()
-        self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
         self._init_fuzzy_system()
+        self.device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
 
     def edge_func(self, edges):
 
@@ -32,15 +32,11 @@ class AnteLayer(nn.Module):
         etypes = edges.data['rel_type'] # edge_num, batch, 1
         x1, x2 = Ante_generator(vector)  # edge_num, batch, 2
         # g.edata['rel_type']: edge_num, batch, 1, TODO, if so, could consider musk here
-        # TODO, here need to see if we can change to rel based fuzzy system
-        ante = FuzzyInferSys(x1, x2).to(self.device) # edge_num, batch, rules_num
-        # here we have ante for all pairs, include robot-target pair
-        # TODO, we can first generate coupling weights 
+        ante = FuzzyInferSys(x1, x2) # edge_num, batch, rules_num
         self.coupling_degree_system.input['x1'] = np.array(x1.cpu()) # 72, 7
         self.coupling_degree_system.input['x2'] = np.array(x2.cpu()) # 72, 7
         self.coupling_degree_system.compute()
-        coupling_degree = th.tensor(self.coupling_degree_system.output['coupling_degree']).to(self.device)
-        watch = th.tensor(ante).squeeze()
+        coupling_degree = th.tensor(self.coupling_degree_system.output['coupling_degree']).float().to(self.device)
 
         return {'coupling_degree': coupling_degree}
 
@@ -135,24 +131,26 @@ class FuzzyRGCNLayer(nn.Module):
 
     def message_func(self, edges):
         # TODO, here should take subgraph to do the control between robot and target
-        w = self.weight[edges.data['rel_type']] # 72, 6, in * out
+        w = self.weight[edges.data['rel_type']].view(edges.batch_size(), 1, -1) # 72, in * out
+        coupling_degrees = edges.data['coupling_degree'].unsqueeze(2) # 72, 7
         h_bias = self.h_bias[edges.data['rel_type']] # 72, 3, out
-        truth_values = edges.data['truth_value'] # 72, 7, 3
 
-        w = th.bmm(truth_values, w.view(edges.batch_size(), self.num_rules, -1)).view(-1, self.in_feat, self.out_feat) # --> 72, 7, in * out = 60
+        # TODO, here is the place of next step
+        weighted_w = th.bmm(coupling_degrees, w).view(-1, self.in_feat, self.out_feat) # edge_num * batch, in, out
 
-        bias = th.bmm(truth_values, h_bias)
+
+        # bias = th.bmm(coupling_degrees, h_bias)
         # TODO, here msg'd better involved both src and dst info
-        msg =  th.bmm(edges.src['h'].unsqueeze(1).view(-1, 1, self.in_feat), w).view(edges.batch_size(), truth_values.shape[1], self.out_feat) # 72 * 7 * out
+        msg =  th.bmm(edges.src['h'].view(-1, 1, self.in_feat), weighted_w).view(edges.batch_size(), -1, self.out_feat) # 72 * 7 * out
 
-        return {'msg': msg + bias}
+        return {'msg': msg}
 
-    def forward(self, g, feat, etypes, truth_value):
+    def forward(self, g, feat, etypes, coupling_degree):
         with g.local_scope():
             # pass node features and etypes information
             g.ndata['h'] = feat # 9, batch, input_dim 
             g.edata['rel_type'] = etypes # assigned every 
-            g.edata['truth_value'] = truth_value # 72, batch, 3
+            g.edata['coupling_degree'] = coupling_degree # 72, batch, 3
 
             # message passing
             g.update_all(self.message_func, fn.sum('msg', 'h'))
@@ -185,6 +183,6 @@ g, edge_types = graph_and_etype(node_num=9)
 g = g.to(device)
 edge_types = edge_types.to(device)
 
-model = FuzzyRGCN(6, 10, 8, 4, 9)
+model = FuzzyRGCN(6, 10, 8, 4, 9).to(device)
 
 print(model(g, node_infos, edge_types).shape)
