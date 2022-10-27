@@ -17,6 +17,7 @@ def FuzzyInferSys(x1, x2):
     
     x1_range = np.arange(0, 3.1, 0.1)
     x2_range = np.arange(0, 181, 1)
+    weights = np.arange(0, 1, 0.01)
 
     x11 = fuzz.gaussmf(x1_range, 0, 0.75)
     x12 = fuzz.gaussmf(x1_range, 1.5, 0.75)
@@ -98,7 +99,7 @@ def obs_to_feat(obs): # transfer observation into node features form
         node_infos = th.cat((robot_info.unsqueeze(1), target_info.unsqueeze(1), obstacle_infos), dim=1)
         return node_infos
 
-def nodes2ante(node_infos): # provide truth values based on two given nodes info
+def nodes2ante(node_infos): # Discard method
     # node1 always refer to moving object or satatic object while node2 refer to static object
     Ante = []
 
