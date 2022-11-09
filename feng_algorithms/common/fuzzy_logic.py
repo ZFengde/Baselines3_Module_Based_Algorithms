@@ -158,16 +158,17 @@ def graph_and_etype(node_num): # generate graph, etypes
     return dgl.graph((edge_src, edge_dst)), th.tensor(edge_types)
 
 def obs_to_feat(obs): # transfer observation into node features form
-    # obs_size = 6 + 2 + 7*2 = 22
+    # obs_size = 6 + 2 + 3*2 = 22 14
     
     if obs.dim() == 1:
         obs = obs.unsqueeze(0)
 
     if obs.dim() == 2:
         m = th.nn.ZeroPad2d((0, 4, 0, 0))
+        obs_num = int((obs.shape[1] - 8) / 2)
         robot_info = obs[:, :6]
-        target_info = m(obs[:, 6: 8])
-        obstacle_infos = m(obs[:, 8:].view(-1, 7, 2))
+        target_info = m(obs[:, 6: 8]) # 6, 6
+        obstacle_infos = m(obs[:, 8:].view(-1, obs_num, 2))
 
         node_infos = th.cat((robot_info.unsqueeze(1), target_info.unsqueeze(1), obstacle_infos), dim=1)
         return node_infos

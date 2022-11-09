@@ -87,7 +87,6 @@ class FuzzyRGCNLayer(nn.Module):
         self.num_rels = num_rels
         self.num_rules = num_rules
 
-
         # self.loop_weight = nn.Parameter(th.Tensor(in_feat, out_feat))
         self.weight = nn.Parameter(th.Tensor(self.num_rels, self.in_feat, self.out_feat))
         self.h_bias = nn.Parameter(th.Tensor(self.num_rels, self.out_feat))
@@ -101,11 +100,12 @@ class FuzzyRGCNLayer(nn.Module):
 
     def message_func(self, edges):
         w = self.weight[edges.data['rel_type']].view(edges.batch_size(), 1, -1) # 72, in * out
-        coupling_degrees = edges.data['coupling_degree'].unsqueeze(2) # 72, 7
+        coupling_degrees = edges.data['coupling_degree'].unsqueeze(2) # edge_num, batch, 1
 
-        ante = edges.data['truth_value'].view(-1, self.num_rules) # 72* 7, 9 
+        ante = edges.data['truth_value'].view(-1, self.num_rules) # edge_num, batch, rule_num --> 72* 7, 9 
 
-        # h_bias = self.h_bias[edges.data['rel_type']] # 72, 3, out
+        # TODO, bias haven't been introduced
+        h_bias = self.h_bias[edges.data['rel_type']].unsqueeze(1) # edge_num, out_feat
         # generate ante first method w and second w at the same time
         # and then replace the specific edge with ante_w
         weighted_w = th.bmm(coupling_degrees, w).view(edges.batch_size(), -1, self.in_feat, self.out_feat) # edge_num * batch, in, out
@@ -113,8 +113,9 @@ class FuzzyRGCNLayer(nn.Module):
         # here is the coupling weighted message
         weighted_w[self.ID] = ante_w[self.ID] 
         msg =  th.bmm((edges.dst['h'] - edges.src['h']).view(-1, 1, self.in_feat), weighted_w.view(-1, self.in_feat, self.out_feat)).view(edges.batch_size(), -1, self.out_feat) # 72 * 7 * out
-
-        return {'msg': msg}
+        msg += th.matmul(coupling_degrees, h_bias)
+        
+        return {'msg': msg} # edge_num, batch, out_feat
 
     def forward(self, g, feat, etypes, coupling_degree, truth_value):
         with g.local_scope(): 
@@ -146,9 +147,9 @@ class FuzzyRGCN(nn.Module):
 
     def forward(self, g, feat, etypes):
         
-        coupling_degree, ante = self.ante_layer(g, feat) # here spend too many time
-        x = th.tanh(self.layer1(g, feat, etypes, coupling_degree, ante))
-        x = self.layer2(g, x, etypes, coupling_degree, ante)
+        coupling_degree, truth_value = self.ante_layer(g, feat) # here spend too many time
+        x = th.tanh(self.layer1(g, feat, etypes, coupling_degree, truth_value))
+        x = self.layer2(g, x, etypes, coupling_degree, truth_value) # node_num, batch, out_dim
         
         return x
 

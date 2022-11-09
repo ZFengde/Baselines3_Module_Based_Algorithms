@@ -14,7 +14,7 @@ def learn():
 		os.makedirs(models_dir)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
-	num_cpu = 4
+	num_cpu = 6
 	# env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv, env_kwargs={'exclude_current_positions_from_observation': False})
 	env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv,)
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1, tensorboard_log=logdir, use_sde=False)
@@ -29,7 +29,7 @@ def test():
 	env_id = 'Turtlebot-v4'
 	env = make_vec_env(env_id, n_envs=1, vec_env_cls=SubprocVecEnv,)
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO_variant2/{env_id}/models/1666545654/1790000')
+	model.load(f'./GNN_PPO_variant2/{env_id}/models/1668008955/1070000')
 	model.test(100)
 
 if __name__ == '__main__':
