@@ -14,7 +14,7 @@ def learn():
 		os.makedirs(models_dir)
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
-	num_cpu = 1
+	num_cpu = 4
 	# env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv, env_kwargs={'exclude_current_positions_from_observation': False})
 	env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv,)
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1, tensorboard_log=logdir, use_sde=False)

@@ -13,7 +13,7 @@ import gym
 import numpy as np
 import torch as th
 from torch import nn
-from feng_algorithms.common.fuzzyrgcn import FuzzyRGCN, AnteLayer
+from feng_algorithms.common.fuzzyrgcn import FuzzyRGCN
 from feng_algorithms.common.fuzzy_logic import obs_to_feat, graph_and_etype
 
 from stable_baselines3.common.distributions import (
@@ -110,9 +110,8 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # Action distribution
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
-        self.ante = AnteLayer()
         device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
-        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9)# input = 6 * 6, output = 6 * 6, 36
+        self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9) # input = 6 * 6, output = 6 * 6, 36
         self.g, self.edge_types = graph_and_etype(node_num=9)
         self.g = self.g.to(device)
         self.edge_types = self.edge_types.to(device)
@@ -314,7 +313,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         node_infos = th.transpose(obs_to_feat(obs).to(self.device), 0, 1) # batch * node * dim = 7 * 9 * 6
         features = th.mean(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
 
-        # e = time.time()
-        # print('d time: %s Seconds'%(e-a))
+        # c = time.time()
+        # print('2 time: %s Seconds'%(c-a))
         
-        return features # batch * 
+        return features 

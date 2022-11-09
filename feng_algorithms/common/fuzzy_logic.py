@@ -3,6 +3,70 @@ import skfuzzy as fuzz
 import dgl
 import torch as th
 import time
+import torch.nn as nn
+
+class gaussmf():
+    def __init__(self, mean, sigma):
+        self.mean = mean
+        self.sigma = sigma
+
+    def ante(self, x):
+        return th.exp(-((x - self.mean)**2.) / (2 * self.sigma **2.))
+    
+class TS_Fuzzy(nn.Module):
+    def __init__(self, rules_num):
+        super().__init__()
+
+        self.rules_num = rules_num
+        self.sub_systems_mat = th.tensor([[0, -0.05, -0.2, -0.1, -0.25, -0.02, -0.2, -0.05, 0], 
+                                        [0, -0.0011, -0.0022, -0.0022, 0, -0.00044, -0.0011, -0.0011, 0]])
+        self.sub_systems_bias = th.tensor([1, 1.05, 0.7, 1, 1, 0.22, 0.9, 0.35, 0])
+        self._init_rules()
+
+    def forward(self, x1, x2): # x1 = 72, 7
+        if x1.dim() == 1:
+            x1 = x1.unsqueeze(0)
+            x2 = x2.unsqueeze(0)
+
+        truth_value = self.ante_process(x1, x2) # 72, 7, 9, as coeffient
+
+        premises = th.stack((x1, x2), dim=2).view(-1, 2).float() # 9, 72*7, 2
+        consequence = th.matmul(premises, self.sub_systems_mat) + self.sub_systems_bias
+        consequence = consequence.view(x1.shape[0], x1.shape[1], self.rules_num)
+
+        output = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
+        return truth_value, output
+
+    def ante_process(self, x1, x2):
+        # see if here can be batch operations, but not very important
+        x1_s_level = self.x1_s.ante(x1)
+        x1_m_level = self.x1_m.ante(x1)
+        x1_l_level = self.x1_l.ante(x1)
+
+        x2_s_level = self.x2_s.ante(x2)
+        x2_m_level = self.x2_m.ante(x2)
+        x2_l_level = self.x2_l.ante(x2)
+
+        truth_values = th.stack((th.min(x1_s_level, x2_s_level),
+                         th.min(x1_s_level, x2_m_level),
+                         th.min(x1_s_level, x2_l_level), 
+                         th.min(x1_m_level, x2_s_level), 
+                         th.min(x1_m_level, x2_m_level), 
+                         th.min(x1_m_level, x2_l_level),
+                         th.min(x1_l_level, x2_s_level),
+                         th.min(x1_l_level, x2_m_level),
+                         th.min(x1_l_level, x2_l_level)), dim=2) 
+
+        return truth_values
+
+    def _init_rules(self):
+        self.x1_s = gaussmf(0, 0.75) # mean and sigma
+        self.x1_m = gaussmf(2, 0.75)
+        self.x1_l = gaussmf(4, 0.75)
+
+        self.x2_s = gaussmf(0, 30) # mean and sigma
+        self.x2_m = gaussmf(90, 30) # mean and sigma
+        self.x2_l = gaussmf(180, 30) # mean and sigma
 
 def FuzzyInferSys(x1, x2):
     
@@ -12,42 +76,51 @@ def FuzzyInferSys(x1, x2):
     2: target-obstacle, 3:obstacle-obstacle
     '''
 
-    x1 = th.clip(x1, 0, 3).cpu()
-    x2 = th.clip(x2, 0, 180).cpu()
+    x1 = th.clip(x1, 0, 3)
+    x2 = th.clip(x2, 0, 180)
     
     x1_range = np.arange(0, 3.1, 0.1)
     x2_range = np.arange(0, 181, 1)
-    weights = np.arange(0, 1, 0.01)
+    coupling_range = np.arange(0, 1, 0.01)
 
-    x11 = fuzz.gaussmf(x1_range, 0, 0.75)
-    x12 = fuzz.gaussmf(x1_range, 1.5, 0.75)
-    x13 = fuzz.gaussmf(x1_range, 3, 0.75)
+    x1_s = fuzz.gaussmf(x1_range, 0, 0.75)
+    x1_m = fuzz.gaussmf(x1_range, 1.5, 0.75)
+    x1_l = fuzz.gaussmf(x1_range, 3, 0.75)
 
-    x11_level = fuzz.interp_membership(x1_range, x11, x1)
-    x12_level = fuzz.interp_membership(x1_range, x12, x1)
-    x13_level = fuzz.interp_membership(x1_range, x13, x1)
+    x1_s_level = fuzz.interp_membership(x1_range, x1_s, x1)
+    x1_m_level = fuzz.interp_membership(x1_range, x1_m, x1)
+    x1_l_level = fuzz.interp_membership(x1_range, x1_l, x1)
 
-    x21 = fuzz.gaussmf(x2_range, 0, 45)
-    x22 = fuzz.gaussmf(x2_range, 90, 45)
-    x23 = fuzz.gaussmf(x2_range, 180, 45)
+    x2_s = fuzz.gaussmf(x2_range, 0, 45)
+    x2_m = fuzz.gaussmf(x2_range, 90, 45)
+    x2_l = fuzz.gaussmf(x2_range, 180, 45)
 
-    x21_level = fuzz.interp_membership(x2_range, x21, x2)
-    x22_level = fuzz.interp_membership(x2_range, x22, x2)
-    x23_level = fuzz.interp_membership(x2_range, x23, x2)
+    x2_s_level = fuzz.interp_membership(x2_range, x2_s, x2)
+    x2_m_level = fuzz.interp_membership(x2_range, x2_m, x2)
+    x2_l_level = fuzz.interp_membership(x2_range, x2_l, x2)
+    
+    coupling_s = fuzz.gaussmf(coupling_range, 0, 0.2)
+    coupling_m = fuzz.gaussmf(coupling_range, 0.5, 0.2)
+    coupling_l = fuzz.gaussmf(coupling_range, 1, 0.2)
 
+    a = th.max(th.tensor(x1_s_level), th.tensor(x2_s_level))
     # edge_num, batch, rules_num
-    truth_value = th.stack((th.tensor(x11_level) * th.tensor(x21_level), # = 0.135 * x11_level
-                            th.tensor(x11_level) * th.tensor(x22_level), # = x11_level
-                            th.tensor(x11_level) * th.tensor(x23_level), # = 0.135 * x11_level
-                            th.tensor(x12_level) * th.tensor(x21_level),
-                            th.tensor(x12_level) * th.tensor(x22_level),
-                            th.tensor(x12_level) * th.tensor(x23_level),
-                            th.tensor(x13_level) * th.tensor(x21_level),
-                            th.tensor(x13_level) * th.tensor(x22_level),
-                            th.tensor(x13_level) * th.tensor(x23_level)), dim=2) # 72, 1, 9
+    active_rules = th.cat((th.max(th.tensor(x1_s_level), th.tensor(x2_s_level)), # l
+                            th.max(th.tensor(x1_s_level), th.tensor(x2_m_level)), # l
+                            th.max(th.tensor(x1_s_level), th.tensor(x2_l_level)), # m
+                            th.max(th.tensor(x1_m_level), th.tensor(x2_s_level)), # l
+                            th.max(th.tensor(x1_m_level), th.tensor(x2_m_level)), # m
+                            th.max(th.tensor(x1_m_level), th.tensor(x2_l_level)), # l
+                            th.max(th.tensor(x1_l_level), th.tensor(x2_s_level)), # s
+                            th.max(th.tensor(x1_l_level), th.tensor(x2_m_level)), # s
+                            th.max(th.tensor(x1_l_level), th.tensor(x2_l_level))), dim=2) # s
 
+    a = th.max(active_rules[:, :][0, 3, 6])
+    coupling_s_level = th.min(coupling_s, th.max(active_rules[0, 3, 6]).squeeze()) # coupling_s edge, batch, 1
+    coupling_m_level = th.min(coupling_m, th.max(active_rules[1, 4, 7]))
+    coupling_l_level = th.min(coupling_l, th.max(active_rules[2, 5, 8]))
     # return th.nn.functional.normalize((truth_value), dim=2).float()
-    return truth_value.float()
+    return 
     
 def graph_and_etype(node_num): # generate graph, etypes
     edge_src = []
@@ -148,7 +221,7 @@ def Ante_generator(vector):
     x2 = angle(-alpha, beta)
     return x1, x2
 
-# x1 = th.rand(1, 1, 3)
-# x2 = th.tensor([[[90, 90, 90]]])
+# x1 = th.rand(1, 1, 1)
+# x2 = th.rand(1, 1, 1)
 # truth_values = FuzzyInferSys(x1, x2)
-# print(truth_values)
+# print(truth_values.shape)
