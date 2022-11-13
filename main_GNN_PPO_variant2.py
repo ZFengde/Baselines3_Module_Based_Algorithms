@@ -7,7 +7,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from feng_algorithms.GNN_PPO_variant2.GNN_PPO_variant2 import GNN_PPO_variant2
 
 def learn():
-	env_id = 'Turtlebot-v4'
+	env_id = 'Turtlebot-v1'
 	models_dir = f"GNN_PPO_variant2/{env_id}/models/{int(time.time())}/"
 	logdir = f"GNN_PPO_variant2/{env_id}/logs/{int(time.time())}/"
 	if not os.path.exists(models_dir):
