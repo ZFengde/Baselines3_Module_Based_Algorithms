@@ -102,6 +102,7 @@ class FuzzyRGCNLayer(nn.Module):
         w = self.weight[edges.data['rel_type']].view(edges.batch_size(), 1, -1) # 72, in * out
         coupling_degrees = edges.data['coupling_degree'].unsqueeze(2) # edge_num, batch, 1
 
+        # this is only for robot-target 
         ante = edges.data['truth_value'].view(-1, self.num_rules) # edge_num, batch, rule_num --> 72* 7, 9 
 
         # TODO, bias haven't been introduced
