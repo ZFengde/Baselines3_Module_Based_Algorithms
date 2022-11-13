@@ -112,7 +112,8 @@ class FuzzyRGCNLayer(nn.Module):
         ante_w = th.matmul(ante, self.weight_robot_target.view(self.num_rules, -1)).view(edges.batch_size(), -1, self.in_feat, self.out_feat)
         # here is the coupling weighted message
         weighted_w[self.ID] = ante_w[self.ID] 
-        msg =  th.bmm((edges.dst['h'] - edges.src['h']).view(-1, 1, self.in_feat), weighted_w.view(-1, self.in_feat, self.out_feat)).view(edges.batch_size(), -1, self.out_feat) # 72 * 7 * out
+        # msg =  th.bmm((edges.dst['h'] - edges.src['h']).view(-1, 1, self.in_feat), weighted_w.view(-1, self.in_feat, self.out_feat)).view(edges.batch_size(), -1, self.out_feat) # 72 * 7 * out
+        msg =  th.bmm(edges.src['h'].view(-1, 1, self.in_feat), weighted_w.view(-1, self.in_feat, self.out_feat)).view(edges.batch_size(), -1, self.out_feat) # 72 * 7 * out
         msg += th.matmul(coupling_degrees, h_bias)
         
         return {'msg': msg} # edge_num, batch, out_feat

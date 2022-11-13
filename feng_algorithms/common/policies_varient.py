@@ -218,7 +218,6 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         :return: action, value and log probability of the action
         """
         # Preprocess the observation if needed
-        # features = self.extract_features(obs)
         features = self.gnn_process(obs)
         latent_pi, latent_vf = self.mlp_extractor(features)
         # Evaluate the values for the given observations
@@ -289,7 +288,6 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         :param obs:
         :return: the action distribution.
         """
-        # features = self.extract_features(obs)
         features = self.gnn_process(obs)
         latent_pi = self.mlp_extractor.forward_actor(features)
         return self._get_action_dist_from_latent(latent_pi, obs, features)
@@ -301,7 +299,6 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         :param obs:
         :return: the estimated values.
         """
-        # features = self.extract_features(obs)
         features = self.gnn_process(obs)
         latent_vf = self.mlp_extractor.forward_critic(features)
         return self.value_net(latent_vf)
@@ -313,7 +310,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # a = time.time()
         
         node_infos = th.transpose(obs_to_feat(obs).to(self.device), 0, 1) # batch * node * dim = 7 * 9 * 6
-        features = th.mean(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
+        features = th.sum(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
 
         # c = time.time()
         # print('2 time: %s Seconds'%(c-a))
