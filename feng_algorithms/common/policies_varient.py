@@ -114,7 +114,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9) # input = 6 * 6, output = 6 * 6, 36
         
         # self.g, self.edge_types = graph_and_etype(node_num=9)
-        self.g, self.edge_types = graph_and_etype(node_num=5)
+        self.g, self.edge_types = graph_and_etype(node_num=1+2)
         self.g = self.g.to(device)
         self.edge_types = self.edge_types.to(device)
         self._build(lr_schedule)
@@ -161,7 +161,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         #       net_arch here is an empty list and mlp_extractor does not
         #       really contain any layers (acts like an identity module).
         self.mlp_extractor = MlpExtractor(
-            self.graph_out_dim,
+            self.graph_out_dim * 2,
             net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
@@ -310,9 +310,11 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # a = time.time()
         
         node_infos = th.transpose(obs_to_feat(obs).to(self.device), 0, 1) # batch * node * dim = 7 * 9 * 6
-        features = th.sum(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
+        # features = th.sum(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
+        features = th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1) # batch * num_node * feat_size
+        # TODO, if we're going to use mean here, we'd better introduce attention
 
+        output = th.concat((features[:, 0], features[:, 1]), dim=1)
         # c = time.time()
         # print('2 time: %s Seconds'%(c-a))
-        
-        return features 
+        return output 
