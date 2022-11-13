@@ -26,14 +26,14 @@ def learn():
 		model.save(models_dir, TIMESTEPS*iters)
 
 def test():
-	env_id = 'Turtlebot-v4'
+	env_id = 'Turtlebot-v1'
 	env = make_vec_env(env_id, n_envs=1, vec_env_cls=SubprocVecEnv,)
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO_variant2/{env_id}/models/1668027239/1540000')
+	model.load(f'./GNN_PPO_variant2/{env_id}/models/1668361637/3210000')
 	model.test(100)
 
 if __name__ == '__main__':
-	learn()
+	test()
 
 
 

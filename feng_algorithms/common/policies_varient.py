@@ -308,6 +308,9 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
             obs = obs.unsqueeze(0)
         
         node_infos = th.transpose(obs_to_feat(obs).to(self.device), 0, 1) # batch * node * dim = 7 * 9 * 6
-        features = th.sum(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
+        features = th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1) # batch * num_node * feat_size
+        # TODO, if we're going to use mean here, we'd better introduce attention
 
-        return features 
+        output = th.concat((features[:, 0], features[:, 1]), dim=1)
+
+        return output 

@@ -292,7 +292,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
                 action = action.unsqueeze(dim=0).cpu().numpy()
 
                 clipped_action = np.clip(action, self.env.action_space.low, self.env.action_space.high)
-                obs, reward, done, _ = self.env.step(action)
+                obs, reward, done, _ = self.env.step(clipped_action)
 
                 ep_reward += reward
                 ep_len += 1
