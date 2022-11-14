@@ -36,8 +36,7 @@ class TS_Fuzzy(nn.Module):
 
         output = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
         return truth_value, output
-
-    def ante_process(self, x1, x2):
+    def ante_process(self, x1, x2) : #-> truth_values
         # see if here can be batch operations, but not very important
         x1_s_level = self.x1_s.ante(x1)
         x1_m_level = self.x1_m.ante(x1)
@@ -68,61 +67,7 @@ class TS_Fuzzy(nn.Module):
         self.x2_m = gaussmf(90, 30) # mean and sigma
         self.x2_l = gaussmf(180, 30) # mean and sigma
 
-def FuzzyInferSys(x1, x2):
-    
-    '''
-    relationships: 
-    0: robot-target, 1: robot-obstacle
-    2: target-obstacle, 3:obstacle-obstacle
-    '''
-
-    x1 = th.clip(x1, 0, 3)
-    x2 = th.clip(x2, 0, 180)
-    
-    x1_range = np.arange(0, 3.1, 0.1)
-    x2_range = np.arange(0, 181, 1)
-    coupling_range = np.arange(0, 1, 0.01)
-
-    x1_s = fuzz.gaussmf(x1_range, 0, 0.75)
-    x1_m = fuzz.gaussmf(x1_range, 1.5, 0.75)
-    x1_l = fuzz.gaussmf(x1_range, 3, 0.75)
-
-    x1_s_level = fuzz.interp_membership(x1_range, x1_s, x1)
-    x1_m_level = fuzz.interp_membership(x1_range, x1_m, x1)
-    x1_l_level = fuzz.interp_membership(x1_range, x1_l, x1)
-
-    x2_s = fuzz.gaussmf(x2_range, 0, 45)
-    x2_m = fuzz.gaussmf(x2_range, 90, 45)
-    x2_l = fuzz.gaussmf(x2_range, 180, 45)
-
-    x2_s_level = fuzz.interp_membership(x2_range, x2_s, x2)
-    x2_m_level = fuzz.interp_membership(x2_range, x2_m, x2)
-    x2_l_level = fuzz.interp_membership(x2_range, x2_l, x2)
-    
-    coupling_s = fuzz.gaussmf(coupling_range, 0, 0.2)
-    coupling_m = fuzz.gaussmf(coupling_range, 0.5, 0.2)
-    coupling_l = fuzz.gaussmf(coupling_range, 1, 0.2)
-
-    a = th.max(th.tensor(x1_s_level), th.tensor(x2_s_level))
-    # edge_num, batch, rules_num
-    active_rules = th.cat((th.max(th.tensor(x1_s_level), th.tensor(x2_s_level)), # l
-                            th.max(th.tensor(x1_s_level), th.tensor(x2_m_level)), # l
-                            th.max(th.tensor(x1_s_level), th.tensor(x2_l_level)), # m
-                            th.max(th.tensor(x1_m_level), th.tensor(x2_s_level)), # l
-                            th.max(th.tensor(x1_m_level), th.tensor(x2_m_level)), # m
-                            th.max(th.tensor(x1_m_level), th.tensor(x2_l_level)), # l
-                            th.max(th.tensor(x1_l_level), th.tensor(x2_s_level)), # s
-                            th.max(th.tensor(x1_l_level), th.tensor(x2_m_level)), # s
-                            th.max(th.tensor(x1_l_level), th.tensor(x2_l_level))), dim=2) # s
-
-    a = th.max(active_rules[:, :][0, 3, 6])
-    coupling_s_level = th.min(coupling_s, th.max(active_rules[0, 3, 6]).squeeze()) # coupling_s edge, batch, 1
-    coupling_m_level = th.min(coupling_m, th.max(active_rules[1, 4, 7]))
-    coupling_l_level = th.min(coupling_l, th.max(active_rules[2, 5, 8]))
-    # return th.nn.functional.normalize((truth_value), dim=2).float()
-    return 
-    
-def graph_and_etype(node_num): # generate graph, etypes
+def graph_and_etype(node_num): # -> graph, edge_types
     edge_src = []
     edge_dst = []
     edge_types = []
@@ -157,7 +102,7 @@ def graph_and_etype(node_num): # generate graph, etypes
             # see if here could be changed to batch operation
     return dgl.graph((edge_src, edge_dst)), th.tensor(edge_types)
 
-def obs_to_feat(obs): # transfer observation into node features form
+def obs_to_feat(obs): # -> node_infos
     # obs_size = 6 + 2 + 3*2 = 22 14
     
     if obs.dim() == 1:
@@ -173,38 +118,7 @@ def obs_to_feat(obs): # transfer observation into node features form
         node_infos = th.cat((robot_info.unsqueeze(1), target_info.unsqueeze(1), obstacle_infos), dim=1)
         return node_infos
 
-def nodes2ante(node_infos): # Discard method
-    # node1 always refer to moving object or satatic object while node2 refer to static object
-    Ante = []
-
-    for i in range(node_infos.shape[1]):
-        for j in range(node_infos.shape[1]):
-            if i == j:
-                continue
-
-            # robot-target
-            if (i==0 and j==1) or (i==1 and j==0):
-                x1, x2 = Ante_generator(node_infos[:, 0, :], node_infos[:, 1, :], angle_include=True)
-                Ante.append(th.stack((x1, x2), dim=1)) # 4, 2
-
-            # robot-obstacle
-            elif (i==0 and 2<=j<=8):
-                x1, x2 = Ante_generator(node_infos[:, 0, :], node_infos[:, j, :], angle_include=True)
-                Ante.append(th.stack((x1, x2), dim=1))
-
-            # obstacle-robot
-            elif (2<=i<=8 and j==0):
-                x1, x2 = Ante_generator(node_infos[:, 0, :], node_infos[:, i, :], angle_include=True)
-                Ante.append(th.stack((x1, x2), dim=1))
-
-            # target-obstacle and obstacle-obstacle
-            else:
-                x1, x2 = Ante_generator(node_infos[:, i, :], node_infos[:, j, :], angle_include=False)
-                Ante.append(th.stack((x1, x2), dim=1))
-
-    return th.stack(Ante, dim=0)
-
-def angle(v1, v2): # calculate angle between two give vectors
+def angle(v1, v2): # -> degree
     # 72, 7, 2, 72, 7, 2
     epsilon =1e-8
     cos = th.nn.CosineSimilarity(dim=2, eps=1e-6)
@@ -214,15 +128,10 @@ def angle(v1, v2): # calculate angle between two give vectors
     degree = th.rad2deg(radian)
     return degree
 
-def Ante_generator(vector):
+def Ante_generator(vector): # -> x1, x2
 
     alpha = vector[:, :, :2]
     beta = vector[:, :, 2: 4] + vector[:, :, 4: 6]
     x1 = th.linalg.norm((alpha), axis=2)
     x2 = angle(-alpha, beta)
     return x1, x2
-
-# x1 = th.rand(1, 1, 1)
-# x2 = th.rand(1, 1, 1)
-# truth_values = FuzzyInferSys(x1, x2)
-# print(truth_values.shape)

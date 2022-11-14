@@ -14,32 +14,38 @@ class gaussmf():
     def ante(self, x):
         return th.exp(-((x - self.mean)**2.) / (2 * self.sigma **2.))
 
-class TSFuzzyLayer(nn.Module):
+class TSFuzzyLayer(nn.Module): # -> coupling_degree, truth_value
     def __init__(self):
         super(TSFuzzyLayer, self).__init__()
         self.rules_num = 9
+        # 2 * 9
         self.sub_systems_mat = nn.Parameter(th.tensor([[0, -0.05, -0.2, -0.1, -0.25, -0.02, -0.2, -0.05, 0], 
                                                         [0, -0.0011, -0.0022, -0.0022, 0, -0.00044, -0.0011, -0.0011, 0]]), requires_grad=False)
-        self.sub_systems_bias = nn.Parameter(th.tensor([1, 1.05, 0.7, 1, 1, 0.22, 0.9, 0.35, 0]), requires_grad=False)
+        self.sub_systems_bias = nn.Parameter(th.tensor([1, 1, 0.7, 1, 1, 0.22, 0.9, 0.35, 0]), requires_grad=False)
         self._init_rules()
 
     def edge_func(self, edges):
 
-        vector = edges.dst['h'] - edges.src['h'] 
+        # preprocessing
+        vector = edges.dst['h'] - edges.src['h'] # edge_num, batch, input_dim
         x1, x2 = Ante_generator(vector)  # edge_num, batch, 2
-
         if x1.dim() == 1:
             x1 = x1.unsqueeze(0)
             x2 = x2.unsqueeze(0)
 
+        # 3 * 3 --> 9
         truth_value = self.ante_process(x1, x2) # 72, 7, 9, as coeffient
 
+        # stack x1, x2 together
         premises = th.stack((x1, x2), dim=2).view(-1, 2).float() # 9, 72*7, 2
+        # n, 2 * 2, 9 --> n, 9, use consequent matrix generate consequence
         consequence = th.matmul(premises, self.sub_systems_mat) + self.sub_systems_bias
+        # which is the output of different consequent matrix, but vectorized
         consequence = consequence.view(x1.shape[0], x1.shape[1], self.rules_num)
-
+        # normalized and output 
         coupling_degree = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
 
+        # 1 / 9
         return {'coupling_degree': coupling_degree, 'truth_value': truth_value}
 
     def forward(self, g, feat):
@@ -79,7 +85,7 @@ class TSFuzzyLayer(nn.Module):
         self.x2_m = gaussmf(90, 30) # mean and sigma
         self.x2_l = gaussmf(180, 30) # mean and sigma
 
-class FuzzyRGCNLayer(nn.Module):
+class FuzzyRGCNLayer(nn.Module): # using antecedants to update node features
     def __init__(self, in_feat, out_feat, num_rels, num_rules):
         super(FuzzyRGCNLayer, self).__init__()
         self.in_feat = in_feat
@@ -105,7 +111,6 @@ class FuzzyRGCNLayer(nn.Module):
         # this is only for robot-target 
         ante = edges.data['truth_value'].view(-1, self.num_rules) # edge_num, batch, rule_num --> 72* 7, 9 
 
-        # TODO, bias haven't been introduced
         h_bias = self.h_bias[edges.data['rel_type']].unsqueeze(1) # edge_num, out_feat
         # generate ante first method w and second w at the same time
         # and then replace the specific edge with ante_w
