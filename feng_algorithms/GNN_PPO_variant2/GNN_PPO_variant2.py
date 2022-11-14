@@ -269,7 +269,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
             reset_num_timesteps=reset_num_timesteps,
         )
 
-    def save(self, models_dir, training_step):
+    def save(self, models_dir):
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
             print(f'logging to {models_dir}/{self.num_timesteps}')
