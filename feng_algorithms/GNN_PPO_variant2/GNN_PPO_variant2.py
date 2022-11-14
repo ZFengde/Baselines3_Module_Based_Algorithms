@@ -272,8 +272,8 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
     def save(self, models_dir, training_step):
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
-            print(f'logging to {models_dir}/{training_step}')
-        th.save(self.policy.state_dict(), f'{models_dir}/{training_step}') 
+            print(f'logging to {models_dir}/{self.num_timesteps}')
+        th.save(self.policy.state_dict(), f'{models_dir}/{self.num_timesteps}') 
 
     def load(self, path):
         self.policy.load_state_dict(th.load(path))
@@ -292,7 +292,7 @@ class GNN_PPO_variant2(OnPolicyAlgorithm):
                 action = action.unsqueeze(dim=0).cpu().numpy()
 
                 clipped_action = np.clip(action, self.env.action_space.low, self.env.action_space.high)
-                obs, reward, done, _ = self.env.step(action)
+                obs, reward, done, _ = self.env.step(clipped_action)
 
                 ep_reward += reward
                 ep_len += 1

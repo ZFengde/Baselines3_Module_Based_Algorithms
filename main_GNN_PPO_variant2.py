@@ -15,9 +15,15 @@ def learn():
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 	num_cpu = 6
-	# env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv, env_kwargs={'exclude_current_positions_from_observation': False})
-	env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv,)
+	obstalce_num = 5
+	env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv, env_kwargs={'use_gui': False, 'obstalce_num': obstalce_num})
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1, tensorboard_log=logdir, use_sde=False)
+	# here for logging parameters
+	file = open(logdir + 'parameters.txt', 'w')
+	file.write(f'Policy: \n{model.policy} \n\
+				\rObstacle Num: {obstalce_num} \n') 
+	file.close()
+
 	TIMESTEPS = 10000
 	iters = 0
 	for i in range(1000):
@@ -27,9 +33,10 @@ def learn():
 
 def test():
 	env_id = 'Turtlebot-v4'
-	env = make_vec_env(env_id, n_envs=1, vec_env_cls=SubprocVecEnv,)
+	obstalce_num = 3
+	env = make_vec_env(env_id, n_envs=1, vec_env_cls=SubprocVecEnv, env_kwargs={'use_gui': False, 'obstalce_num': obstalce_num})
 	model = GNN_PPO_variant2('GnnPolicy_variant2', env, verbose=1,  use_sde=False)
-	model.load(f'./GNN_PPO_variant2/{env_id}/models/1668027239/1540000')
+	model.load(f'./GNN_PPO_variant2/{env_id}/models/1668360266/6250000')
 	model.test(100)
 
 if __name__ == '__main__':

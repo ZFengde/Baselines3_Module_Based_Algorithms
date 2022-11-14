@@ -47,6 +47,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         ortho_init: bool = True,
         use_sde: bool = False,
         log_std_init: float = 0.0,
+        obstalce_num: int = 3,
         full_std: bool = True,
         sde_net_arch: Optional[List[int]] = None,
         use_expln: bool = False,
@@ -92,6 +93,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         self.normalize_images = normalize_images
         self.log_std_init = log_std_init
         dist_kwargs = None
+        self.obstalce_num = obstalce_num
         # Keyword arguments for gSDE distribution
         if use_sde:
             dist_kwargs = {
@@ -114,7 +116,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9) # input = 6 * 6, output = 6 * 6, 36
         
         # self.g, self.edge_types = graph_and_etype(node_num=9)
-        self.g, self.edge_types = graph_and_etype(node_num=1+2)
+        self.g, self.edge_types = graph_and_etype(node_num=self.obstalce_num+2)
         self.g = self.g.to(device)
         self.edge_types = self.edge_types.to(device)
         self._build(lr_schedule)
@@ -313,7 +315,6 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         # features = th.sum(th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1), dim=1) # batch * num_node * feat_size
         features = th.transpose(self.gnn(self.g, node_infos.float(), self.edge_types), 0, 1) # batch * num_node * feat_size
         # TODO, if we're going to use mean here, we'd better introduce attention
-
         output = th.concat((features[:, 0], features[:, 1]), dim=1)
         # c = time.time()
         # print('2 time: %s Seconds'%(c-a))
