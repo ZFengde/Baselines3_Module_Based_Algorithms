@@ -89,6 +89,7 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             self.action_space,
             self.lr_schedule,
             use_sde=self.use_sde,
+            obstacle_num=self.env.get_attr('obstacle_num'),
             **self.policy_kwargs  # pytype:disable=not-instantiable
         )
         self.policy = self.policy.to(self.device)

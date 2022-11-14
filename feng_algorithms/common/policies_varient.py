@@ -47,6 +47,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         ortho_init: bool = True,
         use_sde: bool = False,
         log_std_init: float = 0.0,
+        obstacle_num: int = 3,
         full_std: bool = True,
         sde_net_arch: Optional[List[int]] = None,
         use_expln: bool = False,
@@ -85,6 +86,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         self.activation_fn = activation_fn
         self.ortho_init = ortho_init
         self.graph_out_dim = 8
+        self.obstacle_num = obstacle_num
         
         observation_space = self.observation_space
         self.features_extractor = features_extractor_class(self.observation_space, **self.features_extractor_kwargs)
@@ -113,8 +115,7 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
         self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9) # input = 6 * 6, output = 6 * 6, 36
         
-        # self.g, self.edge_types = graph_and_etype(node_num=9)
-        self.g, self.edge_types = graph_and_etype(node_num=5)
+        self.g, self.edge_types = graph_and_etype(node_num=self.obstacle_num+2)
         self.g = self.g.to(device)
         self.edge_types = self.edge_types.to(device)
         self._build(lr_schedule)
