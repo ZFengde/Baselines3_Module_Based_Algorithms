@@ -126,8 +126,9 @@ class FuzzyRGCNLayer(nn.Module):
             g.edata['coupling_degree'] = coupling_degree # edge_num, batch, 1
             g.edata['truth_value'] = truth_value # edge_num, batch, 9
 
-            sg = dgl.node_subgraph(g, [0, 1])
-            self.ID = sg.edata[dgl.EID]
+            sg = dgl.node_subgraph(g, [0, 1]) 
+            self.ID = sg.edata[dgl.EID] # 0, 4
+            print(self.ID)
             # message passing
             g.update_all(self.message_func, fn.sum('msg', 'h'))
 
