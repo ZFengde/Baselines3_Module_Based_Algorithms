@@ -44,12 +44,18 @@ class TSFuzzyLayer(nn.Module): # -> coupling_degree, truth_value
         consequence = consequence.view(x1.shape[0], x1.shape[1], self.rules_num)
         # normalized and output 
         coupling_degree = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
+        coupling_degree = coupling_degree.unsqueeze(2)
+                # Soft max the coupling according to the edge type
+        for i in range(len(self.edge_sg_ID)):
+            coupling_degree[self.edge_sg_ID[i]] = th.softmax(coupling_degree[self.edge_sg_ID[i]], dim=0)
 
         # 1 / 9
         return {'coupling_degree': coupling_degree, 'truth_value': truth_value}
 
-    def forward(self, g, feat):
+    def forward(self, g, feat, edge_sg_ID):
         g.srcdata['h'] = feat # 9, batch, input_dim 
+        self.edge_sg_ID = edge_sg_ID
+        
         g.apply_edges(self.edge_func)
         
         return g.edata['coupling_degree'], g.edata['truth_value'] # 72, batch
@@ -109,10 +115,8 @@ class FuzzyRGCNLayer(nn.Module): # using antecedants to update node features
         w = self.weight[edges.data['rel_type']].view(edges.batch_size(), 1, -1) # 72, in * out
         h_bias = self.h_bias[edges.data['rel_type']].unsqueeze(1) # edge_num, out_feat
 
-        coupling_degrees = edges.data['coupling_degree'].unsqueeze(2) # edge_num, batch, 1
-        # but operation cause can't compute gradient
-        # TODO, should be conducted relational softmax here
-        coupling_degrees[self.ID] = 1.
+        coupling_degrees = edges.data['coupling_degree'] # edge_num, batch, 1
+
         # this is only for robot-target 
         ante = edges.data['truth_value'].view(-1, self.num_rules) # edge_num, batch, rule_num --> 72* 7, 9 
 
@@ -121,10 +125,10 @@ class FuzzyRGCNLayer(nn.Module): # using antecedants to update node features
         # edge_num, batch, in_feat, out_feat, in this operation:
         # edge_num, batch, num_rules * num_rules, in_feat, out_feat, i.e., weigted sum of different weights
         # --> edge_num, batch, in_feat, out_feat
-        ante_w = th.matmul(ante, self.weight_robot_target.view(self.num_rules, -1)).view(edges.batch_size(), -1, self.in_feat, self.out_feat)
+        # ante_w = th.matmul(ante, self.weight_robot_target.view(self.num_rules, -1)).view(edges.batch_size(), -1, self.in_feat, self.out_feat)
 
         # replace robot-target weight with ante_w, since we treat them differently
-        weighted_w[self.ID] = ante_w[self.ID] # edge_num, batch, in_feat, out_feat
+        # weighted_w[self.ID] = ante_w[self.ID] # edge_num, batch, in_feat, out_feat
 
         msg =  th.bmm(edges.src['h'].view(-1, 1, self.in_feat), weighted_w.view(-1, self.in_feat, self.out_feat)).view(edges.batch_size(), -1, self.out_feat)
 
@@ -133,7 +137,7 @@ class FuzzyRGCNLayer(nn.Module): # using antecedants to update node features
         
         return {'msg': msg} # edge_num, batch, out_feat
 
-    def forward(self, g, feat, etypes, coupling_degree, truth_value, edge_sg_ID):
+    def forward(self, g, feat, etypes, coupling_degree, truth_value):
         with g.local_scope(): 
             # pass node features and etypes information
             g.ndata['h'] = feat # 9, batch, input_dim 
@@ -141,11 +145,6 @@ class FuzzyRGCNLayer(nn.Module): # using antecedants to update node features
             g.edata['coupling_degree'] = coupling_degree # edge_num, batch, 1
             g.edata['truth_value'] = truth_value # edge_num, batch, 9
             
-            # TODO, here is generate edge type depedent-subgraphs
-            edge_sg_ID
-            sg = dgl.node_subgraph(g, [0, 1])
-
-            self.ID = sg.edata[dgl.EID]
             # message passing
             g.update_all(self.message_func, fn.sum('msg', 'h'))
 
@@ -166,9 +165,9 @@ class FuzzyRGCN(nn.Module):
 
     def forward(self, g, feat, etypes, edge_sg_ID):
         
-        coupling_degree, truth_value = self.ante_layer(g, feat) # here spend too many time
-        x = th.tanh(self.layer1(g, feat, etypes, coupling_degree, truth_value, edge_sg_ID))
-        x = self.layer2(g, x, etypes, coupling_degree, truth_value, edge_sg_ID) # node_num, batch, out_dim
+        coupling_degree, truth_value = self.ante_layer(g, feat, edge_sg_ID) # here spend too many time
+        x = th.tanh(self.layer1(g, feat, etypes, coupling_degree, truth_value))
+        x = self.layer2(g, x, etypes, coupling_degree, truth_value) # node_num, batch, out_dim
         
         return x
 
