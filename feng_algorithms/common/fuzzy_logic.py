@@ -36,6 +36,7 @@ class TS_Fuzzy(nn.Module):
 
         output = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
         return truth_value, output
+        
     def ante_process(self, x1, x2) : #-> truth_values
         # see if here can be batch operations, but not very important
         x1_s_level = self.x1_s.ante(x1)
@@ -71,6 +72,9 @@ def graph_and_etype(node_num): # -> graph, edge_types
     edge_src = []
     edge_dst = []
     edge_types = []
+    ID_indicator = 0
+    edge_type_ID = [[], [], [], []]
+
     for i in range(node_num):
         for j in range(node_num):
 
@@ -86,21 +90,28 @@ def graph_and_etype(node_num): # -> graph, edge_types
             # robot-target
             if (i==0 and j==1) or (i==1 and j==0):
                 edge_types.append(0)
+                edge_type_ID[0].append(ID_indicator)
 
             # robot-obstacle
             elif (i==0 and 2<=j) or (2<=i and j==0):
                 edge_types.append(1)
+                edge_type_ID[1].append(ID_indicator)
 
             # target-obstacle
             elif (i==1 and 2<=j) or (2<=i and j==1):
                 edge_types.append(2)
+                edge_type_ID[2].append(ID_indicator)
 
             # obstacle-obstacle
             else:
                 edge_types.append(3)
+                edge_type_ID[3].append(ID_indicator)
+            
+            ID_indicator += 1
 
             # see if here could be changed to batch operation
-    return dgl.graph((edge_src, edge_dst)), th.tensor(edge_types)
+    return dgl.graph((edge_src, edge_dst)), th.tensor(edge_types), edge_type_ID
+
 
 def obs_to_feat(obs): # -> node_infos
     # obs_size = 6 + 2 + 3*2 = 22 14
