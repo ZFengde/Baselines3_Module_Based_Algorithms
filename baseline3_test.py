@@ -1,4 +1,5 @@
 import gym
+import safety_gym
 import numpy as np
 import turtlebot_env
 from stable_baselines3 import PPO, TD3
@@ -10,7 +11,7 @@ from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 
 def learn():
-	env_id = 'Turtlebot-v4'
+	env_id = 'Safexp-PointGoal1-v0'
 	models_dir = f"Baselines3_PPO/{env_id}/models/{int(time.time())}/"
 	logdir = f"Baselines3_PPO/{env_id}/logs/{int(time.time())}/"
 
@@ -19,7 +20,7 @@ def learn():
 	if not os.path.exists(logdir):
 		os.makedirs(logdir)
 
-	num_cpu = 4
+	num_cpu = 6
 	# env = make_vec_env(env_id, n_envs=num_cpu, seed=0, vec_env_cls=SubprocVecEnv, env_kwargs={'exclude_current_positions_from_observation': False})
 	env = make_vec_env(env_id, n_envs=num_cpu, vec_env_cls=SubprocVecEnv,)
 

@@ -1,1 +1,4 @@
-from feng_algorithms.GNN_PPO import GNN_PPO
+from feng_algorithms.PPO.PPO import PPO
+from feng_algorithms.GNN_PPO.GNN_PPO import GNN_PPO
+from feng_algorithms.GNN_PPO_variant1.GNN_PPO_variant1 import GNN_PPO_variant1
+from feng_algorithms.GNN_PPO_variant2.GNN_PPO_variant2 import GNN_PPO_variant2

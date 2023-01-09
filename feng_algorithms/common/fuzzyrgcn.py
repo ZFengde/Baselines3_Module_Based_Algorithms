@@ -14,7 +14,7 @@ class gaussmf():
     def ante(self, x):
         return th.exp(-((x - self.mean)**2.) / (2 * self.sigma **2.))
 
-class TSFuzzyLayer(nn.Module): # -> coupling_degree, truth_value
+class TSFuzzyLayer(nn.Module): # -> attention, truth_value
     def __init__(self):
         super(TSFuzzyLayer, self).__init__()
         self.rules_num = 9
@@ -42,15 +42,16 @@ class TSFuzzyLayer(nn.Module): # -> coupling_degree, truth_value
         consequence = th.matmul(premises, self.sub_systems_mat) + self.sub_systems_bias
         # which is the output of different consequent matrix, but vectorized
         consequence = consequence.view(x1.shape[0], x1.shape[1], self.rules_num)
-        # normalized and output 
-        coupling_degree = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
-        coupling_degree = coupling_degree.unsqueeze(2)
+
+        # normalized and relation based softmax 
+        attention = th.sum((truth_value * consequence), dim=2) / th.sum(truth_value, dim=2)
+        attention = attention.unsqueeze(2)
                 # Soft max the coupling according to the edge type
         for i in range(len(self.edge_sg_ID)):
-            coupling_degree[self.edge_sg_ID[i]] = th.softmax(coupling_degree[self.edge_sg_ID[i]], dim=0)
+            attention[self.edge_sg_ID[i]] = th.softmax(attention[self.edge_sg_ID[i]], dim=0)
 
         # 1 / 9
-        return {'coupling_degree': coupling_degree, 'truth_value': truth_value}
+        return {'attention': attention, 'truth_value': truth_value}
 
     def forward(self, g, feat, edge_sg_ID):
         g.srcdata['h'] = feat # 9, batch, input_dim 
@@ -58,7 +59,7 @@ class TSFuzzyLayer(nn.Module): # -> coupling_degree, truth_value
         
         g.apply_edges(self.edge_func)
         
-        return g.edata['coupling_degree'], g.edata['truth_value'] # 72, batch
+        return g.edata['attention'], g.edata['truth_value'] # 72, batch
 
     def ante_process(self, x1, x2):
         # see if here can be batch operations, but not very important
@@ -82,7 +83,7 @@ class TSFuzzyLayer(nn.Module): # -> coupling_degree, truth_value
 
         return truth_values
 
-    def _init_rules(self):
+    def f_init_rules(self):
         self.x1_s = gaussmf(0, 0.75) # mean and sigma
         self.x1_m = gaussmf(2, 0.75)
         self.x1_l = gaussmf(4, 0.75)
@@ -112,37 +113,21 @@ class FuzzyRGCNLayer(nn.Module): # using antecedants to update node features
 
     def message_func(self, edges):
         # assign parameters according to the relation type
-        w = self.weight[edges.data['rel_type']].view(edges.batch_size(), 1, -1) # 72, in * out
-        h_bias = self.h_bias[edges.data['rel_type']].unsqueeze(1) # edge_num, out_feat
+        w = self.weight[edges.data['rel_type']] # edge_num, in * out
+        h_bias = self.h_bias[edges.data['rel_type']].unsqueeze(1) # edge_num, 1, out_feat
+        attention = edges.data['attention'] # edge_num, batch, 1
 
-        coupling_degrees = edges.data['coupling_degree'] # edge_num, batch, 1
-
-        # this is only for robot-target 
-        ante = edges.data['truth_value'].view(-1, self.num_rules) # edge_num, batch, rule_num --> 72* 7, 9 
-
-        # multiple weight with a coupling degree and mulitiple robot-target weight with ante
-        weighted_w = th.bmm(coupling_degrees, w).view(edges.batch_size(), -1, self.in_feat, self.out_feat) # edge_num * batch, in, out
-        # edge_num, batch, in_feat, out_feat, in this operation:
-        # edge_num, batch, num_rules * num_rules, in_feat, out_feat, i.e., weigted sum of different weights
-        # --> edge_num, batch, in_feat, out_feat
-        # ante_w = th.matmul(ante, self.weight_robot_target.view(self.num_rules, -1)).view(edges.batch_size(), -1, self.in_feat, self.out_feat)
-
-        # replace robot-target weight with ante_w, since we treat them differently
-        # weighted_w[self.ID] = ante_w[self.ID] # edge_num, batch, in_feat, out_feat
-
-        msg =  th.bmm(edges.src['h'].view(-1, 1, self.in_feat), weighted_w.view(-1, self.in_feat, self.out_feat)).view(edges.batch_size(), -1, self.out_feat)
-
-        # TODO, but we only have one bias system
-        msg += th.matmul(coupling_degrees, h_bias) # edge_num, batch, out_feat
+        inter_msg =  th.bmm(edges.src['h'], w) + h_bias # edge_num, batch, out =  edge_num, in, out * edge_num, batch, in
+        msg = attention * inter_msg # edge_num, batch, out_feat = edge_num, batch, 1 * edge_num, batch, out_feat
         
         return {'msg': msg} # edge_num, batch, out_feat
 
-    def forward(self, g, feat, etypes, coupling_degree, truth_value):
+    def forward(self, g, feat, etypes, attention, truth_value):
         with g.local_scope(): 
             # pass node features and etypes information
-            g.ndata['h'] = feat # 9, batch, input_dim 
-            g.edata['rel_type'] = etypes # assigned every 
-            g.edata['coupling_degree'] = coupling_degree # edge_num, batch, 1
+            g.ndata['h'] = feat # node_num, batch, input_dim 
+            g.edata['rel_type'] = etypes 
+            g.edata['attention'] = attention # edge_num, batch, 1
             g.edata['truth_value'] = truth_value # edge_num, batch, 9
             
             # message passing
@@ -165,9 +150,9 @@ class FuzzyRGCN(nn.Module):
 
     def forward(self, g, feat, etypes, edge_sg_ID):
         
-        coupling_degree, truth_value = self.ante_layer(g, feat, edge_sg_ID) # here spend too many time
-        x = th.tanh(self.layer1(g, feat, etypes, coupling_degree, truth_value))
-        x = self.layer2(g, x, etypes, coupling_degree, truth_value) # node_num, batch, out_dim
+        attention, truth_value = self.ante_layer(g, feat, edge_sg_ID) # here spend too many time
+        x = th.tanh(self.layer1(g, feat, etypes, attention, truth_value))
+        x = self.layer2(g, x, etypes, attention, truth_value) # node_num, batch, out_dim
         
         return x
 

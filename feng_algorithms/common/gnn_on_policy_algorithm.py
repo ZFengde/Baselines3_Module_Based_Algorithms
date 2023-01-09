@@ -1,4 +1,5 @@
 import time
+import sys
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import gym
@@ -233,7 +234,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                     self.logger.record("rollout/ep_rew_mean", safe_mean([ep_info["r"] for ep_info in self.ep_info_buffer]))
                     self.logger.record("rollout/ep_len_mean", safe_mean([ep_info["l"] for ep_info in self.ep_info_buffer]))
                 self.logger.record("time/fps", fps)
-                self.logger.record("time/time_elapsed", int(time.time() - self.start_time), exclude="tensorboard")
+                # there is something wrong
+                self.logger.record("time/time_elapsed", max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon), exclude="tensorboard")
                 self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
                 self.logger.dump(step=self.num_timesteps)
 
