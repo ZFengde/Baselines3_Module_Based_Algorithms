@@ -318,3 +318,24 @@ class PPO(OnPolicyAlgorithm):
             eval_log_path=eval_log_path,
             reset_num_timesteps=reset_num_timesteps,
         )
+
+    def test(self, env):
+        while True:
+            obs = env.reset()
+            ep_reward = 0
+            ep_len = 0
+            ep_cost = 0
+            while True:
+                env.render()
+                with th.no_grad():
+                    action = self.policy.predict(obs)[0]
+
+                clipped_action = np.clip(action, env.action_space.low, env.action_space.high)
+                obs, reward, done, info = env.step(clipped_action)
+
+                ep_reward += reward
+                ep_cost += info['cost']
+                ep_len += 1
+                if done:
+                    print(ep_len, ep_reward, ep_cost)
+                    break
