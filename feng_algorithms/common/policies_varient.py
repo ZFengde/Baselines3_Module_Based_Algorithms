@@ -113,11 +113,12 @@ class ActorCriticGnnPolicy_variant2(BasePolicy):
         self.action_dist = make_proba_distribution(action_space, use_sde=use_sde, dist_kwargs=dist_kwargs)
 
         device = th.device("cuda:0" if th.cuda.is_available() else "cpu")
+
         self.gnn = FuzzyRGCN(input_dim=6, h_dim=10, out_dim=self.graph_out_dim, num_rels=4, num_rules=9) # input = 6 * 6, output = 6 * 6, 36
-        
         self.g, self.edge_types, self.edge_sg_ID = graph_and_etype(node_num=self.obstacle_num+2)
         self.g = self.g.to(device)
         self.edge_types = self.edge_types.to(device)
+        
         self._build(lr_schedule)
 
     def _get_constructor_parameters(self) -> Dict[str, Any]:
